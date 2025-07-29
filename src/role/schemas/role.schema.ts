@@ -1,8 +1,8 @@
 // role.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import mongoose, { Document, Types } from 'mongoose';
+import mongoose, { HydratedDocument, Types } from 'mongoose';
 
-export type RoleDocument = Role & Document;
+export type RoleDocument = HydratedDocument<Role>;
 
 @Schema({ timestamps: true })
 export class Role {
@@ -20,7 +20,7 @@ export class Role {
 
   @Prop({ type: Object })
   updatedBy: {
-    _id: mongoose.Schema.Types.ObjectId;
+    _id: Types.ObjectId;
     email: string;
   };
 

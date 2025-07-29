@@ -43,6 +43,7 @@ export class UserService {
       const newUser = await this.userModel.create({
         name,
         email,
+        password: hashedPassword,
         phone,
         address,
         role: role || 'User',
@@ -166,9 +167,10 @@ export class UserService {
       };
     }
   }
-  async validatePassword(password: string, hash: string): Promise<boolean> {
-    return await compare(password, hash);
-  }
+async validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+  return await compare(plainPassword, hashedPassword);
+}
+
 
   async findUserByEmail(email: string): Promise<User | null> {
     return this.userModel.findOne({ email });

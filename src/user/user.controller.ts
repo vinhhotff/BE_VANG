@@ -11,19 +11,22 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { CustomMessage, User } from 'src/auth/decoration/setMetadata';
+import { CustomMessage, Permission, User } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
+import { PermissionEnum } from 'src/permission/permission.interface';
 
 // import { User } from '../decorate/setMetadata';
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) { }
+
   @CustomMessage('Create new user')
   @Post()
   create(@Body() createUserDto: CreateUserDto, @User() user: IUser) {
     return this.userService.createUser(createUserDto, user);
   }
 
+  // @Permission(PermissionEnum.USER_READ)
   @CustomMessage('Fetch List user with Paginate')
   @Get()
   async findAll(
@@ -34,11 +37,14 @@ export class UserController {
     return this.userService.findAll(+currentPage, +limit, qs);
   }
 
+  // @Permission(PermissionEnum.USER_READ_ID)
   @CustomMessage('Fetch user by ID')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.userService.findOneID(id);
   }
+
+  // @Permission(PermissionEnum.USER_UPDATE)
   @CustomMessage('Update user by ID')
   @Patch(':id')
   update(
@@ -48,6 +54,8 @@ export class UserController {
   ) {
     return this.userService.update(id, updateUserDto, user);
   }
+
+  // @Permission(PermissionEnum.USER_DELETE)
   @CustomMessage('Delete user by ID')
   @Delete(':id')
   remove(@Param('id') id: string, @User() user: IUser) {

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { RegisterUserDto } from 'src/user/dto/create-user.dto';
@@ -16,16 +16,21 @@ export class AuthService {
     private readonly configService: ConfigService, // Thêm ConfigService nếu cần
   ) { }
 
-  async validateUser(email: string, pass: string): Promise<any> {
-    const user = await this.userService.findUserByEmail(email); // sửa tên hàm
-    if (user) {
-      const valid = await this.userService.validatePassword(pass, user.password);
-      if (valid) {
-        return user;
-      }
-    }
-    return null;
+ async validateUser(email: string, pass: string): Promise<any> {
+  const user = await this.userService.findUserByEmail(email); // đảm bảo tên hàm đúng
+
+  if (!user) {
+    return null; // không tìm thấy user, trả về null
   }
+
+  const isValidPassword = await this.userService.validatePassword(pass, user.password);
+
+  if (!isValidPassword) {
+    throw new BadRequestException('Invalid password');
+  }
+
+  return user; // xác thực thành công
+}
 
   async login(user: any, res: Response) {
     const payload = {
@@ -76,11 +81,11 @@ export class AuthService {
 
   refreshToken = async (refreshToken: string, res: Response) => {
     if (!refreshToken) {
-      throw new Error('Refresh token not found');
+      throw new BadRequestException('Refresh token not found');
     }
     const user = await this.userService.findUserByAccessToken(refreshToken);
     if (!user) {
-      throw new Error('Invalid refresh token');
+      throw new BadRequestException('Invalid refresh token');
     }
     const payload = {
       _id: user._id.toString(),

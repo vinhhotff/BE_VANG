@@ -1,31 +1,34 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { IUser } from 'src/user/user.interface';
 import { InjectModel } from '@nestjs/mongoose';
 import { Role } from './schemas/role.schema';
 import { SoftDeleteModel } from 'soft-delete-mongoose-plugin';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
+import { Permission } from 'src/permission/schemas/permission.schema';
 
 @Injectable()
 export class RoleService {
   constructor(
     @InjectModel(Role.name)
     private roleModel: SoftDeleteModel<Role>,
+    @InjectModel(Permission.name)
+    private readonly permissionModel: SoftDeleteModel<Permission>,
   ) { }
- async create(createRoleDto: CreateRoleDto, user: IUser) {
-  const {name}= createRoleDto;
-  const existingRole = await this.roleModel.findOne({ name }).exec();
-  if (existingRole) {
-    throw new BadRequestException(`Role with name ${name} already exists`);
-  }
-  const role = await this.roleModel.create({
-    ...createRoleDto,
-    createdBy: user._id,
-  });
+  async create(createRoleDto: CreateRoleDto, user: IUser) {
+    const { name } = createRoleDto;
+    const existingRole = await this.roleModel.findOne({ name }).exec();
+    if (existingRole) {
+      throw new BadRequestException(`Role with name ${name} already exists`);
+    }
+    const role = await this.roleModel.create({
+      ...createRoleDto,
+      createdBy: user._id,
+    });
 
-  return role;
-}
+    return role;
+  }
 
 
   //find with numberpage and limit with query
@@ -98,7 +101,7 @@ export class RoleService {
       const userExist = await this.roleModel.findById(id).exec();
       const updateUserDelete = await this.roleModel.findByIdAndUpdate({ id }, {
         deletedBy: {
-          _id: user._id,
+          _id: user._id.toString(),
           email: user.email,
         }
       })
@@ -114,4 +117,41 @@ export class RoleService {
       };
     }
   }
+
+  async addPermissionsByName(roleId: string, names: string[], user: IUser) {
+    const role = await this.roleModel.findById(roleId);
+    if (!role) throw new NotFoundException('Role not found');
+
+    const permissions = await this.permissionModel.find({ name: { $in: names } }).select('_id');
+    if (permissions.length !== names.length) {
+      throw new BadRequestException('Some permissions are invalid');
+    }
+
+    const current = role.permissions.map(id => id.toString());
+    const added = permissions.map(p => p._id.toString());
+
+    const merged = Array.from(new Set([...current, ...added]));
+
+    role.permissions = merged.map(id => new Types.ObjectId(id));
+    role.updatedBy = {
+      _id: user._id, // đảm bảo đây là ObjectId
+      email: user.email,
+    };
+
+    return role.save();
+  }
+
+  async removePermissionsByName(roleId: string, names: string[], user: IUser) {
+    const role = await this.roleModel.findById(roleId);
+    if (!role) throw new NotFoundException('Role not found');
+
+    const permissions = await this.permissionModel.find({ name: { $in: names } }).select('_id');
+    const removeIds = permissions.map(p => p._id.toString());
+
+    const filtered = role.permissions.filter(id => !removeIds.includes(id.toString()));
+    role.permissions = filtered;
+    role.updatedBy = { _id: user._id, email: user.email };
+    return role.save();
+  }
+
 }
