@@ -10,6 +10,10 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RoleModule } from './role/role.module';
 import { PermissionModule } from './permission/permission.module';
+import { GuestModule } from './guest/guest.module';
+import { MenuItemModule } from './menu-item/menu-item.module';
+import { OrderModule } from './order/order.module';
+import { PayMentModule } from './pay-ment/pay-ment.module';
 
 @Module({
   imports: [
@@ -27,6 +31,10 @@ import { PermissionModule } from './permission/permission.module';
     AuthModule,
     RoleModule,
     PermissionModule,
+    GuestModule,
+    MenuItemModule,
+    OrderModule,
+    PayMentModule,
   ],
   controllers: [AppController],
   providers: [

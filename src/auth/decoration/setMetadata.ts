@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { SetMetadata } from '@nestjs/common';
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { registerDecorator, ValidationArguments, ValidationOptions } from 'class-validator';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
@@ -23,3 +24,23 @@ export const User = createParamDecorator(
 export const PERMISSION_KEY = 'permission';
 export const Permission = (permission: string) => SetMetadata(PERMISSION_KEY, permission);
 
+export function IsOnlyOneDefined(
+  properties: string[],
+  validationOptions?: ValidationOptions,
+) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'isOnlyOneDefined',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      validator: {
+        validate(_: any, args: ValidationArguments) {
+          const obj = args.object as Record<string, any>;
+          const definedCount = properties.filter(prop => obj[prop] !== undefined).length;
+          return definedCount === 1;
+        },
+      },
+    });
+  };
+}
