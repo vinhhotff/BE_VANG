@@ -56,7 +56,7 @@ export class RoleController {
   ) {
     return await this.roleService.addPermissionsToRole(
       id,
-      dto.permissionIds,
+      dto,
       user
     );
   }

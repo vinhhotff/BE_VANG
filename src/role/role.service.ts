@@ -14,6 +14,7 @@ import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import mongoose, { Types } from 'mongoose';
 import { Permission } from 'src/permission/schemas/permission.schema';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { UpdateRolePermissionsDto } from './dto/add-permission.dto';
 
 @Injectable()
 export class RoleService {
@@ -127,7 +128,7 @@ export class RoleService {
   }
   async addPermissionsToRole(
     roleId: string,
-    updateRolePermissionsDto: updateRolePermissionsDto,
+    updateRolePermissionsDto: UpdateRolePermissionsDto,
     user: IUser
   ): Promise<RoleDocument> {
     const { permissionIds } = updateRolePermissionsDto;
@@ -142,11 +143,11 @@ export class RoleService {
     const permissions = await this.permissionModel
       .find({ _id: { $in: permissionIds }, isDelete: false })
       .select('_id')
-      .exec();
+      .exec() as { _id: Types.ObjectId }[];
 
     // Kiểm tra xem tất cả permissionIds có hợp lệ không
     if (permissions.length !== permissionIds.length) {
-      const foundPermissionIds = permissions.map((perm) => perm._id.toString());
+      const foundPermissionIds = permissions.map((permission) => permission._id.toString());
       const missingPermissions = permissionIds.filter(
         (id) => !foundPermissionIds.includes(id)
       );
@@ -169,6 +170,9 @@ export class RoleService {
       .populate('permissions') // Populate để trả về thông tin chi tiết của permissions
       .exec();
 
+    if (!updatedRole) {
+      throw new NotFoundException(`Role with ID ${roleId} not found after update`);
+    }
     return updatedRole;
   }
   async removePermissionsByName(roleId: string, names: string[], user: IUser) {
