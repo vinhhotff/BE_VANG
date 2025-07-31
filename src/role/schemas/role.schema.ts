@@ -1,11 +1,11 @@
-// role.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { HydratedDocument, Types } from 'mongoose';
+import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 
 export type RoleDocument = HydratedDocument<Role>;
 
 @Schema({ timestamps: true })
-export class Role {
+export class Role extends mongoose.Document {
   @Prop({ required: true, unique: true })
   name: string; // ví dụ: 'admin', 'staff', 'guest'
 
@@ -29,10 +29,13 @@ export class Role {
     _id: mongoose.Schema.Types.ObjectId;
     email: string;
   };
+
   @Prop()
   createdAt: Date;
+
   @Prop()
   updateAt: string;
+
   @Prop()
   isDelete: boolean;
 
@@ -41,3 +44,4 @@ export class Role {
 }
 
 export const RoleSchema = SchemaFactory.createForClass(Role);
+RoleSchema.plugin(softDeletePlugin);

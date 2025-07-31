@@ -1,9 +1,8 @@
-// update-role-permissions.dto.ts
-import { IsArray, IsString, ArrayNotEmpty } from 'class-validator';
+import { IsArray, IsMongoId, ArrayNotEmpty } from 'class-validator';
 
 export class UpdateRolePermissionsDto {
   @IsArray()
   @ArrayNotEmpty()
-  @IsString({ each: true }) // là name chứ không phải ObjectId
-  permissionNames: string[];
+  @IsMongoId({ each: true }) // Kiểm tra mỗi phần tử là ObjectId hợp lệ
+  permissionIds: string[];
 }

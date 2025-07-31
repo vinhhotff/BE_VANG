@@ -1,12 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateRoleDto } from './dto/create-role.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
 import { IUser } from 'src/user/user.interface';
 import { InjectModel } from '@nestjs/mongoose';
-import { Role } from './schemas/role.schema';
-import { SoftDeleteModel } from 'soft-delete-mongoose-plugin';
+import { Role, RoleDocument } from './schemas/role.schema';
+import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import mongoose, { Types } from 'mongoose';
 import { Permission } from 'src/permission/schemas/permission.schema';
+import { UpdateRoleDto } from './dto/update-role.dto';
 
 @Injectable()
 export class RoleService {
@@ -14,8 +21,8 @@ export class RoleService {
     @InjectModel(Role.name)
     private roleModel: SoftDeleteModel<Role>,
     @InjectModel(Permission.name)
-    private readonly permissionModel: SoftDeleteModel<Permission>,
-  ) { }
+    private readonly permissionModel: SoftDeleteModel<Permission>
+  ) {}
   async create(createRoleDto: CreateRoleDto, user: IUser) {
     const { name } = createRoleDto;
     const existingRole = await this.roleModel.findOne({ name }).exec();
@@ -29,7 +36,6 @@ export class RoleService {
 
     return role;
   }
-
 
   //find with numberpage and limit with query
   async findAll(currentPage: number, limit: number, qs: string = '') {
@@ -47,7 +53,8 @@ export class RoleService {
     const totalItems = await this.roleModel.countDocuments(filter);
 
     // Thực thi truy vấn
-    const result = await this.roleModel.find(filter)
+    const result = await this.roleModel
+      .find(filter)
       .skip(offset)
       .limit(defaultLimit)
       .exec();
@@ -84,8 +91,6 @@ export class RoleService {
     return filter;
   }
 
-
-
   findOne(id: string) {
     const role = this.roleModel.findById(id).exec();
     if (!role) {
@@ -99,16 +104,19 @@ export class RoleService {
       throw new BadRequestException('can not found ID ');
     } else {
       const userExist = await this.roleModel.findById(id).exec();
-      const updateUserDelete = await this.roleModel.findByIdAndUpdate({ id }, {
-        deletedBy: {
-          _id: user._id.toString(),
-          email: user.email,
+      const updateUserDelete = await this.roleModel.findByIdAndUpdate(
+        { id },
+        {
+          deletedBy: {
+            _id: user._id.toString(),
+            email: user.email,
+          },
         }
-      })
+      );
       if (!userExist) {
         throw new BadRequestException('User not found');
       }
-      await this.roleModel.softDeleteOne({ _id: id });
+      await this.roleModel.softDelete({ _id: id });
       return {
         deletedBy: {
           _id: user._id,
@@ -117,41 +125,66 @@ export class RoleService {
       };
     }
   }
+  async addPermissionsToRole(
+    roleId: string,
+    updateRolePermissionsDto: updateRolePermissionsDto,
+    user: IUser
+  ): Promise<RoleDocument> {
+    const { permissionIds } = updateRolePermissionsDto;
 
-  async addPermissionsByName(roleId: string, names: string[], user: IUser) {
-    const role = await this.roleModel.findById(roleId);
-    if (!role) throw new NotFoundException('Role not found');
-
-    const permissions = await this.permissionModel.find({ name: { $in: names } }).select('_id');
-    if (permissions.length !== names.length) {
-      throw new BadRequestException('Some permissions are invalid');
+    // Tìm role theo ID
+    const role = await this.roleModel.findById(roleId).exec();
+    if (!role) {
+      throw new NotFoundException(`Role with ID ${roleId} not found`);
     }
 
-    const current = role.permissions.map(id => id.toString());
-    const added = permissions.map(p => p._id.toString());
+    // Kiểm tra xem tất cả permissionIds có tồn tại và không bị soft delete
+    const permissions = await this.permissionModel
+      .find({ _id: { $in: permissionIds }, isDelete: false })
+      .select('_id')
+      .exec();
 
-    const merged = Array.from(new Set([...current, ...added]));
+    // Kiểm tra xem tất cả permissionIds có hợp lệ không
+    if (permissions.length !== permissionIds.length) {
+      const foundPermissionIds = permissions.map((perm) => perm._id.toString());
+      const missingPermissions = permissionIds.filter(
+        (id) => !foundPermissionIds.includes(id)
+      );
+      throw new BadRequestException(
+        `Permissions not found: ${missingPermissions.join(', ')}`
+      );
+    }
 
-    role.permissions = merged.map(id => new Types.ObjectId(id));
-    role.updatedBy = {
-      _id: user._id, // đảm bảo đây là ObjectId
-      email: user.email,
-    };
+    // Cập nhật role với permissions mới, sử dụng $addToSet để tránh trùng lặp
+    const updatedRole = await this.roleModel
+      .findByIdAndUpdate(
+        roleId,
+        {
+          $addToSet: { permissions: { $each: permissionIds } },
+          updatedBy: { _id: user._id, email: user.email },
+          updateAt: new Date().toISOString(),
+        },
+        { new: true }
+      )
+      .populate('permissions') // Populate để trả về thông tin chi tiết của permissions
+      .exec();
 
-    return role.save();
+    return updatedRole;
   }
-
   async removePermissionsByName(roleId: string, names: string[], user: IUser) {
     const role = await this.roleModel.findById(roleId);
     if (!role) throw new NotFoundException('Role not found');
 
-    const permissions = await this.permissionModel.find({ name: { $in: names } }).select('_id');
-    const removeIds = permissions.map(p => p._id.toString());
+    const permissions = await this.permissionModel
+      .find({ name: { $in: names } })
+      .select('_id');
+    const removeIds = permissions.map((p) => (p._id as any).toString());
 
-    const filtered = role.permissions.filter(id => !removeIds.includes(id.toString()));
+    const filtered = role.permissions.filter(
+      (id) => !removeIds.includes(id.toString())
+    );
     role.permissions = filtered;
     role.updatedBy = { _id: user._id, email: user.email };
     return role.save();
   }
-
 }

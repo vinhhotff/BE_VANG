@@ -1,36 +1,44 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  forwardRef,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { RegisterUserDto } from 'src/user/dto/create-user.dto';
 import { UserService } from 'src/user/user.service';
 import { Response } from 'express';
-import { IUser } from 'src/user/user.interface';
-import { stringify } from 'querystring';
+
 @Injectable()
 export class AuthService {
   constructor(
+    @Inject(forwardRef(() => UserService)) // ✅ forwardRef ở đây
     private userService: UserService,
     private jwtService: JwtService,
-    private readonly configService: ConfigService, // Thêm ConfigService nếu cần
-  ) { }
+    private readonly configService: ConfigService // Thêm ConfigService nếu cần
+  ) {}
 
- async validateUser(email: string, pass: string): Promise<any> {
-  const user = await this.userService.findUserByEmail(email); // đảm bảo tên hàm đúng
+  async validateUser(email: string, pass: string): Promise<any> {
+    const user = await this.userService.findUserByEmail(email); // đảm bảo tên hàm đúng
 
-  if (!user) {
-    return null; // không tìm thấy user, trả về null
+    if (!user) {
+      return null; // không tìm thấy user, trả về null
+    }
+
+    const isValidPassword = await this.userService.validatePassword(
+      pass,
+      user.password
+    );
+
+    if (!isValidPassword) {
+      throw new BadRequestException('Invalid password');
+    }
+
+    return user; // xác thực thành công
   }
-
-  const isValidPassword = await this.userService.validatePassword(pass, user.password);
-
-  if (!isValidPassword) {
-    throw new BadRequestException('Invalid password');
-  }
-
-  return user; // xác thực thành công
-}
 
   async login(user: any, res: Response) {
     const payload = {
@@ -45,10 +53,13 @@ export class AuthService {
     });
 
     const refreshToken = await this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_EXPIRATION_REFRESHTOKEN_TIME'),
+      expiresIn: this.configService.get<string>(
+        'JWT_EXPIRATION_REFRESHTOKEN_TIME'
+      ),
       secret: this.configService.get<string>('JWT_SECRET_REFRESHTOKEN_SECRET'),
     });
-    const hashedRefreshToken = await this.userService.hashedSomething(refreshToken);
+    const hashedRefreshToken =
+      await this.userService.hashedSomething(refreshToken);
     await this.userService.updateRefreshToken(user._id, hashedRefreshToken);
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
@@ -64,7 +75,6 @@ export class AuthService {
       },
     };
   }
-
 
   async register(user: RegisterUserDto) {
     const newUser = await this.userService.register(user);
@@ -101,25 +111,26 @@ export class AuthService {
       secure: true,
     });
     return { accessToken, user };
-  }
+  };
 
   async logout(res: Response) {
-  const user = await this.userService.findUserByAccessToken(res.req.cookies['refreshToken']);
-  await this.userService.updateRefreshToken(user._id.toString(), '');
+    const user = await this.userService.findUserByAccessToken(
+      res.req.cookies['refreshToken']
+    );
+    await this.userService.updateRefreshToken(user._id.toString(), '');
 
-  // Xoá cookie ở client
-  res.clearCookie('refreshToken', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
-  });
+    // Xoá cookie ở client
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
 
-  res.clearCookie('accessToken', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
-  });
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
     return { message: 'Logout successful' };
   }
-
 }

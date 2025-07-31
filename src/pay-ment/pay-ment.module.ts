@@ -6,8 +6,11 @@ import { PayMentController } from './pay-ment.controller';
 import { PaymentService } from './pay-ment.service';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Payment.name, schema: PaymentSchema }])],
+  imports: [
+    MongooseModule.forFeature([{ name: Payment.name, schema: PaymentSchema }]),
+  ],
   controllers: [PayMentController],
   providers: [PaymentService],
+  exports: [PaymentService, PayMentModule],
 })
-export class PaymentModule {}
+export class PayMentModule {}

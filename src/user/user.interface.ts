@@ -1,5 +1,5 @@
 import mongoose, { Types } from 'mongoose';
-export interface IUser {
+export interface IUser extends mongoose.Document {
   _id: mongoose.Types.ObjectId;
 
   name: string;

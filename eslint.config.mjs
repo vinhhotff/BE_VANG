@@ -1,5 +1,5 @@
 // @ts-check
-
+/*eslint linebreak-style: ["error", "unix"]*/
 import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
@@ -39,9 +39,9 @@ export default tseslint.config(
   // Custom rules
   {
     rules: {
+      'linebreak-style': ['error', process.platform === 'win32' ? 'windows' : 'unix'],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
-      'linebreak-style': ['error', 'windows'],
       'prettier/prettier': [
         'error',
         {

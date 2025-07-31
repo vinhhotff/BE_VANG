@@ -11,14 +11,18 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { CustomMessage, Permission, User } from 'src/auth/decoration/setMetadata';
+import {
+  CustomMessage,
+  Permission,
+  User,
+} from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
 import { PermissionEnum } from 'src/permission/permission.interface';
 
 // import { User } from '../decorate/setMetadata';
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) { }
+  constructor(private readonly userService: UserService) {}
 
   @CustomMessage('Create new user')
   @Post()

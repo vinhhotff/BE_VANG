@@ -1,24 +1,29 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { JwtService } from '@nestjs/jwt';
-/* eslint-disable @typescript-eslint/no-misused-promises */
 import { compare, genSaltSync, hash } from 'bcrypt';
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { CreateUserDto, RegisterUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { IUser } from './user.interface';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from './schemas/user.schema';
-import { SoftDeleteModel } from 'soft-delete-mongoose-plugin';
+import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import mongoose, { Types } from 'mongoose';
-import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class UserService {
   constructor(
-    @InjectModel(User.name)
-    private userModel: SoftDeleteModel<UserDocument>,// 👈 CHÚ Ý
+    @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>, // 👈 CHÚ Ý
     private readonly JwtService: JwtService, // Thêm JwtService nếu cần
-    private readonly configService: ConfigService, // Thêm ConfigService nếu cần
-  ) { }
+    private readonly configService: ConfigService // Thêm ConfigService nếu cần
+  ) {}
 
   //hashPassword function to hash the password
   hashedSomething = async (something: string): Promise<string> => {
@@ -70,7 +75,8 @@ export class UserService {
     const totalItems = await this.userModel.countDocuments(filter);
 
     // Thực thi truy vấn
-    const result = await this.userModel.find(filter)
+    const result = await this.userModel
+      .find(filter)
       .skip(offset)
       .limit(defaultLimit)
       .exec();
@@ -97,18 +103,13 @@ export class UserService {
       conditions.forEach(([key, value]) => {
         if (key && value) {
           // Chỉ xử lý bộ lọc, bỏ qua sort
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
           filter[key] = { $regex: value, $options: 'i' }; // Không phân biệt hoa thường
         }
       });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return filter;
   }
-
-
-
 
   findOneID(id: string) {
     if (!Types.ObjectId.isValid(id)) {
@@ -144,38 +145,50 @@ export class UserService {
   }
 
   async remove(id: string, user: IUser) {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('can not found ID ');
-    } else {
-      const userExist = await this.userModel.findById(id).exec();
-      const updateUserDelete = await this.userModel.findByIdAndUpdate({ id }, {
-        deletedBy: {
-          _id: user._id,
-          email: user.email,
-        }
-
-      })
-      if (!userExist) {
-        throw new BadRequestException('User not found');
-      }
-      await this.userModel.softDeleteOne({ _id: id });
-      return {
-        deletedBy: {
-          _id: user._id,
-          email: user.email,
-        },
-      };
+    if (id === user._id.toString()) {
+      throw new BadRequestException('Cannot remove yourself');
     }
-  }
-async validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
-  return await compare(plainPassword, hashedPassword);
-}
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid ID');
+    }
+
+    const userExist = await this.userModel.findById(id).exec();
+
+    if (!userExist) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Cập nhật thông tin người xóa
+    await this.userModel.findByIdAndUpdate(id, {
+      deletedBy: {
+        _id: user._id,
+        email: user.email,
+      },
+    });
+
+    // Soft delete user
+    await this.userModel.softDelete({ _id: id });
+
+    return {
+      message: 'User deleted successfully',
+      deletedBy: {
+        _id: user._id,
+        email: user.email,
+      },
+    };
+  }
+
+  async validatePassword(
+    plainPassword: string,
+    hashedPassword: string
+  ): Promise<boolean> {
+    return await compare(plainPassword, hashedPassword);
+  }
 
   async findUserByEmail(email: string): Promise<User | null> {
     return this.userModel.findOne({ email });
   }
-
 
   async register(user: RegisterUserDto) {
     const { name, email, password } = user;
@@ -218,5 +231,4 @@ async validatePassword(plainPassword: string, hashedPassword: string): Promise<b
       throw new UnauthorizedException('Invalid token');
     }
   }
-
 }

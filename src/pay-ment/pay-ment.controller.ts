@@ -1,14 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { PayMentService } from './pay-ment.service';
-import { CreatePayMentDto } from './dto/create-pay-ment.dto';
-import { UpdatePayMentDto } from './dto/update-pay-ment.dto';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
+import { PaymentService } from './pay-ment.service';
+import { CreatePaymentDto } from './dto/create-pay-ment.dto';
+import { UpdatePaymentDto } from './dto/update-pay-ment.dto';
 
 @Controller('pay-ment')
 export class PayMentController {
-  constructor(private readonly payMentService: PayMentService) {}
+  constructor(private readonly payMentService: PaymentService) {}
 
   @Post()
-  create(@Body() createPayMentDto: CreatePayMentDto) {
+  create(@Body() createPayMentDto: CreatePaymentDto) {
     return this.payMentService.create(createPayMentDto);
   }
 
@@ -19,16 +27,16 @@ export class PayMentController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.payMentService.findOne(+id);
+    return this.payMentService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updatePayMentDto: UpdatePayMentDto) {
-    return this.payMentService.update(+id, updatePayMentDto);
+  update(@Param('id') id: string, @Body() updatePayMentDto: UpdatePaymentDto) {
+    return this.payMentService.update(id, updatePayMentDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.payMentService.remove(+id);
+    return this.payMentService.remove(id);
   }
 }

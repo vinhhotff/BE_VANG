@@ -1,16 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Inject } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { RoleService } from './role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
 import { IUser } from 'src/user/user.interface';
 import { CustomMessage, User } from 'src/auth/decoration/setMetadata';
-import { InjectModel } from '@nestjs/mongoose';
 import { UpdateRolePermissionsDto } from './dto/add-permission.dto';
 
 @Controller('role')
 export class RoleController {
-  constructor(
-    private readonly roleService: RoleService) { }
+  constructor(private readonly roleService: RoleService) {}
 
   @CustomMessage('Create new role')
   @Post()
@@ -39,27 +45,33 @@ export class RoleController {
   remove(@Param('id') id: string, @User() user: IUser) {
     return this.roleService.remove(id, user);
   }
-  
 
   // role.controller.ts
-@Patch(':id/add-permissions')
-@CustomMessage('Add permissions to role')
-async addPermissions(
-  @Param('id') id: string,
-  @Body() dto: UpdateRolePermissionsDto,
-  @User() user: IUser,
-) {
-  return this.roleService.addPermissionsByName(id, dto.permissionNames, user);
-}
+  @Patch(':id/add-permissions')
+  @CustomMessage('Add permissions to role')
+  async addPermissions(
+    @Param('id') id: string,
+    @Body() dto: UpdateRolePermissionsDto,
+    @User() user: IUser
+  ) {
+    return await this.roleService.addPermissionsToRole(
+      id,
+      dto.permissionIds,
+      user
+    );
+  }
 
-@Patch(':id/remove-permissions')
-@CustomMessage('Remove permissions from role')
-async removePermissions(
-  @Param('id') id: string,
-  @Body() dto: UpdateRolePermissionsDto,
-  @User() user: IUser,
-) {
-  return this.roleService.removePermissionsByName(id, dto.permissionNames, user);
-}
-
+  @Patch(':id/remove-permissions')
+  @CustomMessage('Remove permissions from role')
+  async removePermissions(
+    @Param('id') id: string,
+    @Body() dto: UpdateRolePermissionsDto,
+    @User() user: IUser
+  ) {
+    return this.roleService.removePermissionsByName(
+      id,
+      dto.permissionIds,
+      user
+    );
+  }
 }
