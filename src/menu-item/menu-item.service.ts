@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { MenuItem, MenuItemDocument } from './schemas/menu-item.schema';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
@@ -11,29 +11,80 @@ export class MenuItemService {
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>,
   ) {}
 
-  create(dto: CreateMenuItemDto) {
-    return this.menuItemModel.create(dto);
+  async create(createMenuItemDto: CreateMenuItemDto): Promise<MenuItem> {
+    const menuItem = new this.menuItemModel({
+      ...createMenuItemDto,
+      available: createMenuItemDto.isAvailable ?? true,
+    });
+    return menuItem.save();
   }
 
-  findAll() {
-    return this.menuItemModel.find().exec();
+  async findAll(category?: string, available?: boolean): Promise<MenuItem[]> {
+    const filter: any = {};
+    if (category) filter.category = { $regex: category, $options: 'i' };
+    if (available !== undefined) filter.available = available;
+    
+    return this.menuItemModel.find(filter).exec();
   }
 
-  async findOne(id: string) {
-    const item = await this.menuItemModel.findById(id).exec();
-    if (!item) throw new NotFoundException('Menu item not found');
-    return item;
+  async findById(id: string): Promise<MenuItem> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid menu item ID format');
+    }
+    
+    const menuItem = await this.menuItemModel.findById(id).exec();
+    if (!menuItem) throw new NotFoundException('Menu item not found');
+    return menuItem;
   }
 
-  async update(id: string, dto: UpdateMenuItemDto) {
-    const item = await this.menuItemModel.findByIdAndUpdate(id, dto, { new: true }).exec();
-    if (!item) throw new NotFoundException('Menu item not found');
-    return item;
+  async findByCategory(category: string): Promise<MenuItem[]> {
+    return this.menuItemModel
+      .find({ category: { $regex: category, $options: 'i' }, available: true })
+      .exec();
   }
 
-  async remove(id: string) {
-    const item = await this.menuItemModel.findByIdAndDelete(id).exec();
-    if (!item) throw new NotFoundException('Menu item not found');
-    return item;
+  async update(id: string, updateMenuItemDto: UpdateMenuItemDto): Promise<MenuItem> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid menu item ID format');
+    }
+
+    const updateData = {
+      ...updateMenuItemDto,
+      ...(updateMenuItemDto.isAvailable !== undefined && {
+        available: updateMenuItemDto.isAvailable,
+      }),
+    };
+
+    const menuItem = await this.menuItemModel
+      .findByIdAndUpdate(id, updateData, { new: true })
+      .exec();
+    if (!menuItem) throw new NotFoundException('Menu item not found');
+    return menuItem;
+  }
+
+  async updateAvailability(id: string, available: boolean): Promise<MenuItem> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid menu item ID format');
+    }
+
+    const menuItem = await this.menuItemModel
+      .findByIdAndUpdate(id, { available }, { new: true })
+      .exec();
+    if (!menuItem) throw new NotFoundException('Menu item not found');
+    return menuItem;
+  }
+
+  async remove(id: string): Promise<void> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid menu item ID format');
+    }
+
+    const menuItem = await this.menuItemModel.findByIdAndDelete(id).exec();
+    if (!menuItem) throw new NotFoundException('Menu item not found');
+  }
+
+  async getCategories(): Promise<string[]> {
+    const categories = await this.menuItemModel.distinct('category').exec();
+    return categories.filter(cat => cat); // Remove null/undefined categories
   }
 }

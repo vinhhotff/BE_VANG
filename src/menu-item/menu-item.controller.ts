@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Body, 
+  Patch, 
+  Param, 
+  Delete, 
+  Query,
+  Put 
+} from '@nestjs/common';
 import { MenuItemService } from './menu-item.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
@@ -8,23 +18,45 @@ export class MenuItemController {
   constructor(private readonly menuItemService: MenuItemService) {}
 
   @Post()
-  create(@Body() dto: CreateMenuItemDto) {
-    return this.menuItemService.create(dto);
+  create(@Body() createMenuItemDto: CreateMenuItemDto) {
+    return this.menuItemService.create(createMenuItemDto);
   }
 
   @Get()
-  findAll() {
-    return this.menuItemService.findAll();
+  findAll(
+    @Query('category') category?: string,
+    @Query('available') available?: string,
+  ) {
+    const isAvailable = available === 'true' ? true : available === 'false' ? false : undefined;
+    return this.menuItemService.findAll(category, isAvailable);
+  }
+
+  @Get('categories')
+  getCategories() {
+    return this.menuItemService.getCategories();
+  }
+
+  @Get('category/:category')
+  findByCategory(@Param('category') category: string) {
+    return this.menuItemService.findByCategory(category);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.menuItemService.findOne(id);
+    return this.menuItemService.findById(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateMenuItemDto) {
-    return this.menuItemService.update(id, dto);
+  update(@Param('id') id: string, @Body() updateMenuItemDto: UpdateMenuItemDto) {
+    return this.menuItemService.update(id, updateMenuItemDto);
+  }
+
+  @Put(':id/availability')
+  updateAvailability(
+    @Param('id') id: string,
+    @Body('available') available: boolean,
+  ) {
+    return this.menuItemService.updateAvailability(id, available);
   }
 
   @Delete(':id')
