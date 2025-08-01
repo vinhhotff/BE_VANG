@@ -13,8 +13,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
   CustomMessage,
-  Permission,
   User,
+  Permission,
 } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
 
@@ -24,6 +24,7 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @CustomMessage('Create new user')
+  @Permission('USER:CREATE')
   @Post()
   create(@Body() createUserDto: CreateUserDto, @User() user: IUser) {
     return this.userService.createUser(createUserDto, user);

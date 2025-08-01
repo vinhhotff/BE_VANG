@@ -25,7 +25,7 @@ export class PermissionController {
   @Post()
   create(
     @Body() createPermissionDto: CreatePermissionDto,
-    @User() user: IUser,
+    @User() user: IUser
   ) {
     return this.permissionService.create(createPermissionDto, user);
   }
@@ -35,7 +35,7 @@ export class PermissionController {
   findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
-    @Query('search') search?: string,
+    @Query('search') search?: string
   ) {
     return this.permissionService.findAll(+page, +limit, search);
   }
@@ -51,7 +51,7 @@ export class PermissionController {
   update(
     @Param('id') id: string,
     @Body() updatePermissionDto: UpdatePermissionDto,
-    @User() user: IUser,
+    @User() user: IUser
   ) {
     return this.permissionService.update(id, updatePermissionDto, user);
   }
@@ -80,4 +80,3 @@ export class PermissionController {
     return this.permissionService.getAllPermissions();
   }
 }
-

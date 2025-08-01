@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Permission, PermissionDocument } from './schemas/permission.schema';
@@ -10,17 +15,25 @@ import { IUser } from '../user/user.interface';
 @Injectable()
 export class PermissionService {
   constructor(
-    @InjectModel(Permission.name) private permissionModel: SoftDeleteModel<PermissionDocument>,
+    @InjectModel(Permission.name)
+    private permissionModel: SoftDeleteModel<PermissionDocument>
   ) {}
 
-  async create(createPermissionDto: CreatePermissionDto, user: IUser): Promise<Permission> {
+  async create(
+    createPermissionDto: CreatePermissionDto,
+    user: IUser
+  ): Promise<Permission> {
     // Kiểm tra xem permission đã tồn tại chưa
-    const existingPermission = await this.permissionModel.findOne({ 
-      name: createPermissionDto.name 
-    }).exec();
-    
+    const existingPermission = await this.permissionModel
+      .findOne({
+        name: createPermissionDto.name,
+      })
+      .exec();
+
     if (existingPermission) {
-      throw new ConflictException(`Quyền '${createPermissionDto.name}' đã tồn tại`);
+      throw new ConflictException(
+        `Quyền '${createPermissionDto.name}' đã tồn tại`
+      );
     }
 
     const permission = new this.permissionModel({
@@ -40,7 +53,7 @@ export class PermissionService {
     search?: string
   ): Promise<{ permissions: Permission[]; total: number; totalPages: number }> {
     const filter: any = {};
-    
+
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -82,7 +95,11 @@ export class PermissionService {
     return this.permissionModel.findOne({ name }).exec();
   }
 
-  async update(id: string, updatePermissionDto: UpdatePermissionDto, user: IUser): Promise<Permission> {
+  async update(
+    id: string,
+    updatePermissionDto: UpdatePermissionDto,
+    user: IUser
+  ): Promise<Permission> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('ID permission không hợp lệ');
     }
@@ -93,14 +110,21 @@ export class PermissionService {
     }
 
     // Kiểm tra trùng tên nếu có thay đổi tên
-    if (updatePermissionDto.name && updatePermissionDto.name !== existingPermission.name) {
-      const duplicateName = await this.permissionModel.findOne({ 
-        name: updatePermissionDto.name,
-        _id: { $ne: id }
-      }).exec();
-      
+    if (
+      updatePermissionDto.name &&
+      updatePermissionDto.name !== existingPermission.name
+    ) {
+      const duplicateName = await this.permissionModel
+        .findOne({
+          name: updatePermissionDto.name,
+          _id: { $ne: id },
+        })
+        .exec();
+
       if (duplicateName) {
-        throw new ConflictException(`Quyền '${updatePermissionDto.name}' đã tồn tại`);
+        throw new ConflictException(
+          `Quyền '${updatePermissionDto.name}' đã tồn tại`
+        );
       }
     }
 
@@ -167,7 +191,9 @@ export class PermissionService {
 
     const permission = await this.permissionModel.findById(id).exec();
     if (!permission) {
-      throw new NotFoundException('Không tìm thấy permission sau khi khôi phục');
+      throw new NotFoundException(
+        'Không tìm thấy permission sau khi khôi phục'
+      );
     }
     return permission;
   }

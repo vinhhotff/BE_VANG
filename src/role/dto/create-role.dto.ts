@@ -1,19 +1,21 @@
 // create-role.dto.ts
 import {
-  IsNotEmpty,
-  IsString,
+  ArrayUnique,
   IsArray,
   IsMongoId,
-  ArrayUnique,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 
 export class CreateRoleDto {
   @IsString()
   @IsNotEmpty({ message: 'Role name is required' })
-  readonly name: string; // ví dụ: 'admin', 'staff'
+  readonly name: string;
 
+  @IsOptional()
   @IsArray()
   @ArrayUnique({ message: 'Permissions must be unique' })
   @IsMongoId({ each: true })
-  readonly permissions: string[]; // danh sách ID của permission
+  readonly permissions?: string[];
 }

@@ -9,12 +9,16 @@ import helmet from 'helmet';
 import { VersioningType } from '@nestjs/common/enums/version-type.enum';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { HttpExceptionFilter } from './common/interceptors/http-exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const reflector = app.get(Reflector);
   app.use(cookieParser());
   app.useGlobalGuards(new JwtAuthGuard(reflector));
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor(reflector));
   const configService = app.get(ConfigService);
   const port = configService.get<string>('PORT');
   app.enableCors({

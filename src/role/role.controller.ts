@@ -33,7 +33,7 @@ export class RoleController {
   findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
-    @Query('search') search?: string,
+    @Query('search') search?: string
   ) {
     return this.roleService.findAll(+page, +limit, search);
   }
@@ -49,7 +49,7 @@ export class RoleController {
   update(
     @Param('id') id: string,
     @Body() updateRoleDto: UpdateRoleDto,
-    @User() user: IUser,
+    @User() user: IUser
   ) {
     return this.roleService.update(id, updateRoleDto, user);
   }
@@ -83,9 +83,13 @@ export class RoleController {
   addPermissions(
     @Param('id') id: string,
     @Body() updateRolePermissionsDto: UpdateRolePermissionsDto,
-    @User() user: IUser,
+    @User() user: IUser
   ) {
-    return this.roleService.addPermissionsToRole(id, updateRolePermissionsDto, user);
+    return this.roleService.addPermissionsToRole(
+      id,
+      updateRolePermissionsDto,
+      user
+    );
   }
 
   @CustomMessage('Xóa permissions khỏi role theo tên')
@@ -93,9 +97,8 @@ export class RoleController {
   removePermissions(
     @Param('id') id: string,
     @Body('names') names: string[],
-    @User() user: IUser,
+    @User() user: IUser
   ) {
     return this.roleService.removePermissionsByName(id, names, user);
   }
 }
-

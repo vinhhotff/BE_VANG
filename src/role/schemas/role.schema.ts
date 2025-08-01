@@ -10,7 +10,7 @@ export class Role extends mongoose.Document {
   name: string; // ví dụ: 'admin', 'staff', 'guest'
 
   @Prop({ type: [Types.ObjectId], ref: 'Permission', default: [] })
-  permissions: Types.ObjectId[]; // danh sách quyền
+  permissions?: Types.ObjectId[]; // danh sách quyền
 
   @Prop({ type: Object })
   createdBy: {
