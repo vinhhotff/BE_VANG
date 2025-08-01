@@ -17,7 +17,6 @@ import {
   User,
 } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
-import { PermissionEnum } from 'src/permission/permission.interface';
 
 // import { User } from '../decorate/setMetadata';
 @Controller('user')

@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
 import { MarkOrderPaidDto } from './dto/update-order.dto';
 import { OrderStatus } from './schemas/order.schema';
@@ -41,7 +40,8 @@ export class OrderController {
     @Param('id') id: string, 
     @Body() updateOrderStatusDto: UpdateOrderStatusDto,
   ) {
-    return this.orderService.updateStatus(id, updateOrderStatusDto.status);
+    const statusEnum = OrderStatus[updateOrderStatusDto.status as keyof typeof OrderStatus];
+    return this.orderService.updateStatus(id, statusEnum);
   }
 
   @Patch(':id/paid')

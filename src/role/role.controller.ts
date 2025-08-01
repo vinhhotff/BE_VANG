@@ -7,71 +7,95 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { RoleService } from './role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
-import { IUser } from 'src/user/user.interface';
-import { CustomMessage, User } from 'src/auth/decoration/setMetadata';
+import { UpdateRoleDto } from './dto/update-role.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { User, CustomMessage } from '../auth/decoration/setMetadata';
+import { IUser } from '../user/user.interface';
 import { UpdateRolePermissionsDto } from './dto/add-permission.dto';
 
-@Controller('role')
+@Controller('roles')
+@UseGuards(JwtAuthGuard)
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 
-  @CustomMessage('Create new role')
+  @CustomMessage('Tạo mới role')
   @Post()
   create(@Body() createRoleDto: CreateRoleDto, @User() user: IUser) {
     return this.roleService.create(createRoleDto, user);
   }
 
-  @CustomMessage('Fetch List role with Paginate')
+  @CustomMessage('Lấy danh sách roles với phân trang')
   @Get()
-  async findAll(
-    @Query('page') currentPage: string = '1', // Default to page 1
-    @Query('limit') limit: string = '10', // Default to 10 items per page
-    @Query('qs') qs: string = '' // Default to empty query string
+  findAll(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+    @Query('search') search?: string,
   ) {
-    return this.roleService.findAll(+currentPage, +limit, qs);
+    return this.roleService.findAll(+page, +limit, search);
   }
 
-  @CustomMessage('Fetch role by ID')
+  @CustomMessage('Lấy role theo ID')
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.roleService.findOne(id);
+    return this.roleService.findById(id);
   }
 
+  @CustomMessage('Cập nhật role')
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updateRoleDto: UpdateRoleDto,
+    @User() user: IUser,
+  ) {
+    return this.roleService.update(id, updateRoleDto, user);
+  }
+
+  @CustomMessage('Xóa role (soft delete)')
   @Delete(':id')
-  @CustomMessage('Delete role')
   remove(@Param('id') id: string, @User() user: IUser) {
     return this.roleService.remove(id, user);
   }
 
-  // role.controller.ts
-  @Patch(':id/add-permissions')
-  @CustomMessage('Add permissions to role')
-  async addPermissions(
-    @Param('id') id: string,
-    @Body() dto: UpdateRolePermissionsDto,
-    @User() user: IUser
-  ) {
-    return await this.roleService.addPermissionsToRole(
-      id,
-      dto,
-      user
-    );
+  @CustomMessage('Lấy danh sách roles đã xóa')
+  @Get('deleted/list')
+  getDeleted() {
+    return this.roleService.getDeletedRoles();
   }
 
-  @Patch(':id/remove-permissions')
-  @CustomMessage('Remove permissions from role')
-  async removePermissions(
+  @CustomMessage('Khôi phục role đã xóa')
+  @Patch('restore/:id')
+  restore(@Param('id') id: string) {
+    return this.roleService.restore(id);
+  }
+
+  @CustomMessage('Lấy tất cả roles (không phân trang)')
+  @Get('list/all')
+  getAllRoles() {
+    return this.roleService.getAllRoles();
+  }
+
+  @CustomMessage('Thêm permissions vào role')
+  @Patch(':id/permissions')
+  addPermissions(
     @Param('id') id: string,
-    @Body() dto: UpdateRolePermissionsDto,
-    @User() user: IUser
+    @Body() updateRolePermissionsDto: UpdateRolePermissionsDto,
+    @User() user: IUser,
   ) {
-    return this.roleService.removePermissionsByName(
-      id,
-      dto.permissionIds,
-      user
-    );
+    return this.roleService.addPermissionsToRole(id, updateRolePermissionsDto, user);
+  }
+
+  @CustomMessage('Xóa permissions khỏi role theo tên')
+  @Patch(':id/remove-permissions')
+  removePermissions(
+    @Param('id') id: string,
+    @Body('names') names: string[],
+    @User() user: IUser,
+  ) {
+    return this.roleService.removePermissionsByName(id, names, user);
   }
 }
+

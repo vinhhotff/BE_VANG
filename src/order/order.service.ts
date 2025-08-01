@@ -8,10 +8,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument, OrderStatus } from './schemas/order.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { UpdateOrderDto } from './dto/update-order.dto';
+import { UpdateOrderStatusDto } from './dto/update-order.dto';
 import { MenuItem } from '../menu-item/schemas/menu-item.schema';
 import { Guest } from '../guest/schemas/guest.schema';
 import { User } from '../user/schemas/user.schema';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { MarkOrderPaidDto } from './dto/update-order.dto';
 
 @Injectable()
 export class OrderService {
@@ -20,6 +22,7 @@ export class OrderService {
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
     @InjectModel(Guest.name) private guestModel: Model<Guest>,
     @InjectModel(User.name) private userModel: Model<User>,
+    private readonly loyaltyService: LoyaltyService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
@@ -47,7 +50,7 @@ export class OrderService {
 
     // Validate menu items and calculate total price
     let totalPrice = 0;
-    const validatedItems = [];
+    const validatedItems: { item: string; quantity: number }[] = [];
 
     for (const orderItem of items) {
       const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
@@ -179,10 +182,23 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
+    // Tự động cộng điểm loyalty khi đơn hàng hoàn thành (served)
+    if (status === OrderStatus.SERVED && order.user) {
+      try {
+        await this.loyaltyService.autoAddPointsFromOrder(
+          order.user.toString(),
+          order.totalPrice
+        );
+      } catch (error) {
+        // Log error nhưng không throw để không ảnh hưởng đến việc cập nhật status
+        console.log('Lỗi khi cộng điểm loyalty:', error.message);
+      }
+    }
+
     return order;
   }
 
-  async update(id: string, updateOrderDto: UpdateOrderDto): Promise<Order> {
+  async update(id: string, updateOrderDto: UpdateOrderStatusDto): Promise<Order> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid order ID format');
     }
@@ -203,6 +219,10 @@ export class OrderService {
       .populate('guest', 'tableCode')
       .populate('user', 'name email')
       .exec();
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
 
     return order;
   }
@@ -279,6 +299,24 @@ export class OrderService {
       cancelled: 0,
       totalRevenue: 0,
     };
+  }
+ async markAsPaid (id: string, markOrderPaidDto: MarkOrderPaidDto): Promise<Order> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid order ID format');
+    }
+
+    const order = await this.orderModel
+      .findByIdAndUpdate(id, { paid: true }, { new: true })
+      .populate('items.item', 'name price category images')
+      .populate('guest', 'tableCode')
+      .populate('user', 'name email')
+      .exec();
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    return order;
   }
 }
 
