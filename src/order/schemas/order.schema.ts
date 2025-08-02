@@ -36,7 +36,7 @@ export class Order {
 
   @Prop({ default: 'pending', enum: ['pending', 'preparing', 'served', 'cancelled'] })
   status: string;
-
+  
   @Prop({ required: true })
   totalPrice: number; // Tổng tiền của order
 

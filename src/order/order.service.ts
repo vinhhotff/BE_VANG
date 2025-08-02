@@ -300,7 +300,19 @@ export class OrderService {
       totalRevenue: 0,
     };
   }
- async markAsPaid (id: string, markOrderPaidDto: MarkOrderPaidDto): Promise<Order> {
+
+  async findOrdersInPeriod(start: Date, end: Date): Promise<Order[]> {
+    return this.orderModel
+      .find({
+        createdAt: {
+          $gte: start,
+          $lte: end,
+        },
+      })
+      .exec();
+  }
+
+  async markAsPaid (id: string, markOrderPaidDto: MarkOrderPaidDto): Promise<Order> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid order ID format');
     }
@@ -318,5 +330,5 @@ export class OrderService {
 
     return order;
   }
-}
 
+}

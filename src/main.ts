@@ -22,10 +22,11 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<string>('PORT');
   app.enableCors({
-    allowedHeaders: ['content-type'],
-    origin: configService.get<string>('FE_URL') || '*',
-    credentials: true,
-  });
+  allowedHeaders: ['content-type', 'authorization'],
+  origin: configService.get<string>('FE_URL') || 'http://localhost:3000',
+  credentials: true,
+});
+
   app.use(helmet());
   app.enableVersioning({
     defaultVersion: '1',

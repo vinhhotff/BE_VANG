@@ -17,6 +17,7 @@ import { PayMentModule } from './pay-ment/pay-ment.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { ReservationModule } from './reservation/reservation.module';
 import { QROrderModule } from './qr-order/qr-order.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { QROrderModule } from './qr-order/qr-order.module';
     LoyaltyModule,
     ReservationModule,
     QROrderModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [
