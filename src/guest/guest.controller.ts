@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Param, Body, Patch, Delete, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Patch,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { GuestService } from './guest.service';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
@@ -18,8 +27,8 @@ export class GuestController {
   }
 
   @Get('table')
-  findByTableCode(@Query('code') code: string) {
-    return this.guestService.findByTableName(code);
+  findByTableName(@Query('tableName') tableName: string) {
+    return this.guestService.findByTableName(tableName);
   }
 
   @Get(':id')

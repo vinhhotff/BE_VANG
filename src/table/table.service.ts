@@ -1,6 +1,10 @@
 import { PermissionModule } from './../permission/permission.module';
 import { SoftDeleteModel, softDeletePlugin } from 'soft-delete-plugin-mongoose';
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Table, TableDocument } from './schemas/table.schema';
@@ -10,7 +14,9 @@ import { IUser } from 'src/user/user.interface';
 
 @Injectable()
 export class TableService {
-  constructor(@InjectModel(Table.name) private tableModel: SoftDeleteModel<TableDocument>) {}
+  constructor(
+    @InjectModel(Table.name) private tableModel: SoftDeleteModel<TableDocument>
+  ) {}
 
   async create(createTableDto: CreateTableDto): Promise<Table> {
     const createdTable = new this.tableModel(createTableDto);
@@ -69,21 +75,36 @@ export class TableService {
   }
 
   async findOne(id: string): Promise<TableDocument> {
-    const table = await this.tableModel.findById(id).populate('currentOrder').exec();
+    const table = await this.tableModel
+      .findById(id)
+      .populate('currentOrder')
+      .exec();
     if (!table) {
       throw new NotFoundException(`Table #${id} not found`);
     }
     return table;
   }
+  async findByTableName(tableName: string): Promise<TableDocument> {
+    const table = await this.tableModel
+      .findOne({ tableName })
+      .populate('currentOrder')
+      .exec();
+    if (!table) {
+      throw new NotFoundException(`Table with name "${tableName}" not found`);
+    }
+    return table;
+  }
 
   async update(id: string, updateTableDto: UpdateTableDto): Promise<Table> {
-    const existingTable = await this.tableModel.findByIdAndUpdate(id, updateTableDto, { new: true }).exec();
+    const existingTable = await this.tableModel
+      .findByIdAndUpdate(id, updateTableDto, { new: true })
+      .exec();
     if (!existingTable) {
       throw new NotFoundException(`Table #${id} not found`);
     }
     return existingTable;
   }
-async remove(id: string, user: IUser): Promise<{ message: string }> {
+  async remove(id: string, user: IUser): Promise<{ message: string }> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('ID table không hợp lệ');
     }
@@ -114,43 +135,52 @@ async remove(id: string, user: IUser): Promise<{ message: string }> {
   }
 
   // Cập nhật status của bàn
-  async updateTableStatus(tableId: string, status: 'available' | 'occupied' | 'reserved'): Promise<Table> {
+  async updateTableStatus(
+    tableId: string,
+    status: 'available' | 'occupied' | 'reserved'
+  ): Promise<Table> {
     const updateData: any = { status };
-    
+
     // Nếu chuyển sang available, xóa currentOrder
     if (status === 'available') {
       updateData.currentOrder = null;
     }
-    
-    const table = await this.tableModel.findByIdAndUpdate(tableId, updateData, { new: true }).exec();
+
+    const table = await this.tableModel
+      .findByIdAndUpdate(tableId, updateData, { new: true })
+      .exec();
     if (!table) {
       throw new NotFoundException(`Table #${tableId} not found`);
     }
-    
+
     return table;
   }
 
   // Gán order cho bàn
   async assignOrderToTable(tableId: string, orderId: string): Promise<Table> {
     const table = await this.findOne(tableId);
-    
+
     if (table.status !== 'available') {
-      throw new BadRequestException(`Table ${table.tableName} is not available`);
+      throw new BadRequestException(
+        `Table ${table.tableName} is not available`
+      );
     }
-    
-    const updatedTable = await this.tableModel.findByIdAndUpdate(
-      tableId,
-      {
-        currentOrder: new Types.ObjectId(orderId),
-        status: 'occupied',
-      },
-      { new: true },
-    ).exec();
-    
+
+    const updatedTable = await this.tableModel
+      .findByIdAndUpdate(
+        tableId,
+        {
+          currentOrder: new Types.ObjectId(orderId),
+          status: 'occupied',
+        },
+        { new: true }
+      )
+      .exec();
+
     if (!updatedTable) {
       throw new NotFoundException(`Table #${tableId} not found`);
     }
-    
+
     return updatedTable;
   }
 
@@ -160,7 +190,9 @@ async remove(id: string, user: IUser): Promise<{ message: string }> {
   }
 
   // Tìm bàn theo status
-  async findByStatus(status: 'available' | 'occupied' | 'reserved'): Promise<Table[]> {
+  async findByStatus(
+    status: 'available' | 'occupied' | 'reserved'
+  ): Promise<Table[]> {
     return this.tableModel.find({ status }).populate('currentOrder').exec();
   }
 
@@ -169,4 +201,3 @@ async remove(id: string, user: IUser): Promise<{ message: string }> {
     return this.tableModel.find({ location }).populate('currentOrder').exec();
   }
 }
-

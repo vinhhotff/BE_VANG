@@ -7,14 +7,20 @@ import { startOfDay, endOfDay, format, subDays } from 'date-fns';
 export class AnalyticsService {
   constructor(
     private readonly orderService: OrderService,
-    private readonly menuItemService: MenuItemService,
+    private readonly menuItemService: MenuItemService
   ) {}
 
   async getTodayStats() {
     const today = new Date();
-    const orders = await this.orderService.findOrdersInPeriod(startOfDay(today), endOfDay(today));
+    const orders = await this.orderService.findOrdersInPeriod(
+      startOfDay(today),
+      endOfDay(today)
+    );
     const totalOrders = orders.length;
-    const totalRevenue = orders.reduce((sum, order) => sum + order.totalPrice, 0);
+    const totalRevenue = orders.reduce(
+      (sum, order) => sum + order.totalPrice,
+      0
+    );
 
     return { totalOrders, totalRevenue };
   }
@@ -24,12 +30,21 @@ export class AnalyticsService {
     const dailyStats = [];
     for (let i = 0; i < 7; i++) {
       const day = subDays(today, i);
-      const orders = await this.orderService.findOrdersInPeriod(startOfDay(day), endOfDay(day));
+      const orders = await this.orderService.findOrdersInPeriod(
+        startOfDay(day),
+        endOfDay(day)
+      );
       const totalOrders = orders.length;
-      const totalRevenue = orders.reduce((sum, order) => sum + order.totalPrice, 0);
-      dailyStats.push({ date: format(day, 'yyyy-MM-dd'), totalOrders, totalRevenue } as never);
+      const totalRevenue = orders.reduce(
+        (sum, order) => sum + order.totalPrice,
+        0
+      );
+      dailyStats.push({
+        date: format(day, 'yyyy-MM-dd'),
+        totalOrders,
+        totalRevenue,
+      } as never);
     }
     return dailyStats.reverse();
   }
 }
-

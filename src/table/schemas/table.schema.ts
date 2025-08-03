@@ -3,7 +3,7 @@ import mongoose, { Document, HydratedDocument, Types } from 'mongoose';
 import { Order } from '../../order/schemas/order.schema';
 import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 
-export type TableDocument = HydratedDocument<Table>
+export type TableDocument = HydratedDocument<Table>;
 
 @Schema({ timestamps: true })
 export class Table {
@@ -25,18 +25,16 @@ export class Table {
   };
 
   @Prop({
-  type: {
-    _id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    email: { type: String },
-  },
-})
-deletedBy?: {
-  _id: mongoose.Types.ObjectId;
-  email: string;
-};
-
+    type: {
+      _id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      email: { type: String },
+    },
+  })
+  deletedBy?: {
+    _id: mongoose.Types.ObjectId;
+    email: string;
+  };
 }
 
 export const TableSchema = SchemaFactory.createForClass(Table);
 TableSchema.plugin(softDeletePlugin);
-
