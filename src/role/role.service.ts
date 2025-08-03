@@ -315,7 +315,6 @@ export class RoleService {
     if (!updatedRole) {
       throw new NotFoundException(`Không tìm thấy role với ID ${roleId}`);
     }
-
     return updatedRole;
   }
 }

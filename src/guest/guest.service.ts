@@ -1,18 +1,31 @@
+import { TableService } from './../table/table.service';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Guest } from './schemas/guest.schema';
 import { Model } from 'mongoose';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
+import { Table } from 'src/table/schemas/table.schema';
 
 @Injectable()
 export class GuestService {
   constructor(
     @InjectModel(Guest.name) private guestModel: Model<Guest>,
+    private tableService: TableService,
   ) {}
 
   async create(createGuestDto: CreateGuestDto): Promise<Guest> {
     const guest = new this.guestModel(createGuestDto);
+    if (!guest.tableName) {
+      throw new NotFoundException('Table name is required');
+    }
+    else{
+      const table = await this.tableService.updateTableStatus(guest.tableName);
+      if (!table) {
+        throw new NotFoundException('Table not found');
+      }
+      guest.table = table._id; // Assuming table._id is the reference to the Table schema
+    }
     return guest.save();
   }
 
@@ -26,8 +39,8 @@ export class GuestService {
     return guest;
   }
 
-  async findByTableCode(tableCode: string): Promise<Guest | null> {
-    return this.guestModel.findOne({ tableCode, isPaid: false }).populate('orders payment').exec();
+  async findByTableName(tableName: string): Promise<Guest | null> {
+    return this.guestModel.findOne({ tableName, isPaid: false }).populate('orders payment').exec();
   }
 
   async update(id: string, updateGuestDto: UpdateGuestDto): Promise<Guest> {

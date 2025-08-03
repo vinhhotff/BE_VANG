@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { RegisterUserDto } from 'src/user/dto/create-user.dto';
 import { UserService } from 'src/user/user.service';
 import { Response } from 'express';
+import { IUser } from 'src/user/user.interface';
 
 @Injectable()
 export class AuthService {
@@ -98,7 +99,7 @@ export class AuthService {
       throw new BadRequestException('Invalid refresh token');
     }
     const payload = {
-      _id: user._id.toString(),
+      _id: user._id,
       email: user.email,
       username: user.name,
     };
@@ -114,23 +115,33 @@ export class AuthService {
   };
 
   async logout(res: Response) {
-    const user = await this.userService.findUserByAccessToken(
-      res.req.cookies['refreshToken']
-    );
-    await this.userService.updateRefreshToken(user._id.toString(), '');
+  const refreshToken = res.req.cookies['refreshToken'];
 
-    // Xoá cookie ở client
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-    });
+  // Ép kiểu trả về là IUser, nếu không thể sửa service thì dùng as IUser
+  const user = await this.userService.findUserByAccessToken(refreshToken)as unknown as IUser;
 
-    res.clearCookie('accessToken', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-    });
-    return { message: 'Logout successful' };
+  if (!user || !user._id) {
+    return { message: 'User not found or already logged out' };
   }
+
+  // Ép kiểu ObjectId thành string
+  const userId = user._id.toString();
+
+  await this.userService.updateRefreshToken(userId, '');
+
+  // Xoá cookie ở client
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+  });
+
+  res.clearCookie('accessToken', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+  });
+
+  return { message: 'Logout successful' };
+}
 }

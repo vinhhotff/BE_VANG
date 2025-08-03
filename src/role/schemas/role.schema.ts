@@ -30,17 +30,13 @@ export class Role extends mongoose.Document {
     email: string;
   };
 
-  @Prop()
+// Timestamps are automatically handled by Mongoose when timestamps: true
   createdAt: Date;
+  updatedAt: Date;
 
-  @Prop()
-  updateAt: string;
-
-  @Prop()
-  isDelete: boolean;
-
-  @Prop()
-  deleteAt: Date;
+  // Soft delete fields are handled by the plugin
+  isDeleted?: boolean;
+  deletedAt?: Date;
 }
 
 export const RoleSchema = SchemaFactory.createForClass(Role);

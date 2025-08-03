@@ -19,7 +19,7 @@ export class GuestController {
 
   @Get('table')
   findByTableCode(@Query('code') code: string) {
-    return this.guestService.findByTableCode(code);
+    return this.guestService.findByTableName(code);
   }
 
   @Get(':id')

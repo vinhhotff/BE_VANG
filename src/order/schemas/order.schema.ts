@@ -1,30 +1,23 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types, Document } from 'mongoose';
-import { MenuItem } from 'src/menu-item/schemas/menu-item.schema';
-import { Guest } from 'src/guest/schemas/guest.schema';
-import { IsMongoId, IsOptional } from 'class-validator';
-import { IsOnlyOneDefined } from 'src/auth/decoration/setMetadata';
+import mongoose, { Types, Document } from 'mongoose';
+import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 export type OrderDocument = Order & Document;
 
 @Schema({ timestamps: true })
-export class Order {
-  @IsOptional()
-  @IsMongoId()
-  guest?: string;
+export class Order extends Document {
+  @Prop({ type: Types.ObjectId, ref: 'Guest' })
+  guest?: Types.ObjectId;
 
-  @IsOptional()
-  @IsMongoId()
-  user?: string;
-
-  @IsOnlyOneDefined(['guest', 'user'], {
-    message: 'Chỉ được gửi guest hoặc user, không được gửi cả hai hoặc không gửi gì.',
-  })
-  onlyOnePayer: true;
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  user?: Types.ObjectId;
   @Prop({
     type: [
       {
         item: { type: Types.ObjectId, ref: 'MenuItem', required: true },
         quantity: { type: Number, required: true, min: 1 },
+        note: { type: String, default: '' },
+        unitPrice: { type: Number, required: true, min: 0 },
+        subtotal: { type: Number, required: true, min: 0 }
       },
     ],
     required: true,
@@ -32,30 +25,76 @@ export class Order {
   items: {
     item: Types.ObjectId;
     quantity: number;
+    note?: string;
+    unitPrice: number;
+    subtotal: number;
   }[];
 
-  @Prop({ default: 'pending', enum: ['pending', 'preparing', 'served', 'cancelled'] })
-  status: string;
+  @Prop({ 
+    type: String,
+    enum: ['pending', 'preparing', 'served', 'cancelled'], 
+    default: 'pending' 
+  })
+  status: 'pending' | 'preparing' | 'served' | 'cancelled';
   
-  @Prop({ required: true })
+  @Prop({ required: true, min: 0 })
   totalPrice: number; // Tổng tiền của order
 
   @Prop({ default: false })
   isPaid: boolean;
+
+  @Prop()
+  specialInstructions?: string; // Ghi chú đặc biệt cho đơn hàng
+
+  @Prop()
+  estimatedReadyTime?: Date; // Thời gian dự kiến hoàn thành
+
+  @Prop({ type: Types.ObjectId, ref: 'Table' })
+  table?: Types.ObjectId; // Bàn phục vụ
+
+  @Prop({ type: Object })
+  createdBy?: {
+    _id: mongoose.Schema.Types.ObjectId;
+    email: string;
+  };
+
+  @Prop({ type: Object })
+  updatedBy?: {
+    _id: mongoose.Schema.Types.ObjectId;
+    email: string;
+  };
+
+  // Timestamps are automatically handled by Mongoose when timestamps: true
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Soft delete fields are handled by the plugin
+  isDeleted?: boolean;
+  deletedAt?: Date;
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
+OrderSchema.plugin(softDeletePlugin);
 
 export interface IOrder {
   _id: string;
-  guest: Types.ObjectId;
+  guest?: Types.ObjectId;
+  user?: Types.ObjectId;
   items: {
-    menuItem: Types.ObjectId;
+    item: Types.ObjectId;
     quantity: number;
     note?: string;
+    unitPrice: number;
+    subtotal: number;
   }[];
-  status: 'pending' | 'served' | 'canceled';
-  orderedAt: Date;
+  status: 'pending' | 'preparing' | 'served' | 'cancelled';
+  totalPrice: number;
+  isPaid: boolean;
+  specialInstructions?: string;
+  estimatedReadyTime?: Date;
+  table?: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export enum OrderStatus {

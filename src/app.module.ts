@@ -18,6 +18,7 @@ import { LoyaltyModule } from './loyalty/loyalty.module';
 import { ReservationModule } from './reservation/reservation.module';
 import { QROrderModule } from './qr-order/qr-order.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { TableModule } from './table/table.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     ReservationModule,
     QROrderModule,
     AnalyticsModule,
+    TableModule,
   ],
   controllers: [AppController],
   providers: [

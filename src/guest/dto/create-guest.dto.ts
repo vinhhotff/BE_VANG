@@ -3,5 +3,8 @@ import { IsNotEmpty, IsString } from 'class-validator';
 export class CreateGuestDto {
   @IsString()
   @IsNotEmpty()
-  tableCode: string;
+  tableName: string;
+  @IsString()
+  @IsNotEmpty()
+  guestName: string;
 }

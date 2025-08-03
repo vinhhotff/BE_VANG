@@ -60,13 +60,13 @@ export class PermissionService {
         { description: { $regex: search, $options: 'i' } },
       ];
     }
-
     const skip = (page - 1) * limit;
     const total = await this.permissionModel.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
 
     const permissions = await this.permissionModel
       .find(filter)
+
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
