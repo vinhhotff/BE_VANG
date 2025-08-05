@@ -13,7 +13,7 @@ import { PermissionService } from './permission.service';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { User, CustomMessage } from '../auth/decoration/setMetadata';
+import { User, CustomMessage, Permission, Public } from '../auth/decoration/setMetadata';
 import { IUser } from '../user/user.interface';
 
 @Controller('permissions')
@@ -22,6 +22,7 @@ export class PermissionController {
   constructor(private readonly permissionService: PermissionService) {}
 
   @CustomMessage('Tạo mới permission')
+  @Public()
   @Post()
   create(
     @Body() createPermissionDto: CreatePermissionDto,
@@ -30,6 +31,7 @@ export class PermissionController {
     return this.permissionService.create(createPermissionDto, user);
   }
 
+  @Permission('permission:findAll')
   @CustomMessage('Lấy danh sách permissions với phân trang')
   @Get()
   findAll(
@@ -40,12 +42,14 @@ export class PermissionController {
     return this.permissionService.findAll(+page, +limit, search);
   }
 
+  @Permission('permission:findOne')
   @CustomMessage('Lấy permission theo ID')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.permissionService.findById(id);
   }
 
+  @Permission('permission:update')
   @CustomMessage('Cập nhật permission')
   @Patch(':id')
   update(
@@ -56,24 +60,28 @@ export class PermissionController {
     return this.permissionService.update(id, updatePermissionDto, user);
   }
 
+  @Permission('permission:remove')
   @CustomMessage('Xóa permission (soft delete)')
   @Delete(':id')
   remove(@Param('id') id: string, @User() user: IUser) {
     return this.permissionService.remove(id, user);
   }
 
+  @Permission('permission:getDeleted')
   @CustomMessage('Lấy danh sách permissions đã xóa')
   @Get('deleted/list')
   getDeleted() {
     return this.permissionService.getDeletedPermissions();
   }
 
+  @Permission('permission:restore')
   @CustomMessage('Khôi phục permission đã xóa')
   @Patch('restore/:id')
   restore(@Param('id') id: string) {
     return this.permissionService.restore(id);
   }
 
+  @Permission('permission:getAllPermissions')
   @CustomMessage('Lấy tất cả permissions (không phân trang)')
   @Get('list/all')
   getAllPermissions() {

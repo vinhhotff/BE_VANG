@@ -46,6 +46,7 @@ export class AuthService {
       _id: user._id,
       email: user.email,
       username: user.name,
+      role:user.role
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -57,14 +58,25 @@ export class AuthService {
       expiresIn: this.configService.get<string>(
         'JWT_EXPIRATION_REFRESHTOKEN_TIME'
       ),
-      secret: this.configService.get<string>('JWT_SECRET_REFRESHTOKEN_SECRET'),
+      secret: this.configService.get<string>('JWT_SECRET_TOKEN_SECRET'), // Sử dụng cùng secret
     });
     const hashedRefreshToken =
       await this.userService.hashedSomething(refreshToken);
     await this.userService.updateRefreshToken(user._id, hashedRefreshToken);
+    // Set cả accessToken và refreshToken cookies
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProduction, // Chỉ secure khi production
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+    
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: true,
+      secure: isProduction, // Chỉ secure khi production
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
     return {
@@ -73,6 +85,7 @@ export class AuthService {
         _id: user._id,
         name: user.name,
         email: user.email,
+        role:user.role,
       },
     };
   }
@@ -102,14 +115,19 @@ export class AuthService {
       _id: user._id,
       email: user.email,
       username: user.name,
+      role: user.role,
     };
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: this.configService.get<string>('JWT_EXPIRATION_TIME'),
       secret: this.configService.get<string>('JWT_SECRET_TOKEN_SECRET'),
     });
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
     });
     return { accessToken, user };
   };

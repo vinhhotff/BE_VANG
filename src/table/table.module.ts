@@ -8,7 +8,7 @@ import { Table, TableSchema } from './schemas/table.schema';
   imports: [MongooseModule.forFeature([{ name: Table.name, schema: TableSchema }])],
   controllers: [TableController],
   providers: [TableService],
-  exports: [TableService,TableModule],
+  exports: [TableService],
 })
 export class TableModule {}
 

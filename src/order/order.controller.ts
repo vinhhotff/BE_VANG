@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Permission } from '../auth/decoration/setMetadata';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
@@ -9,11 +10,13 @@ import { OrderStatus } from './schemas/order.schema';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
+  @Permission('order:create')
   @Post()
   create(@Body() createOrderDto: CreateOrderDto) {
     return this.orderService.create(createOrderDto);
   }
 
+  @Permission('order:findAll')
   @Get()
   findAll(
     @Query('status') status?: OrderStatus,
@@ -25,16 +28,19 @@ export class OrderController {
     return this.orderService.findAll(status, guest, user, page, limit);
   }
 
+  @Permission('order:findOne')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.orderService.findById(id);
   }
 
+  @Permission('order:findByGuest')
   @Get('guest/:guestId')
   findByGuest(@Param('guestId') guestId: string) {
     return this.orderService.findByGuest(guestId);
   }
 
+  @Permission('order:updateStatus')
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string, 
@@ -44,6 +50,7 @@ export class OrderController {
     return this.orderService.updateStatus(id, statusEnum);
   }
 
+  @Permission('order:markAsPaid')
   @Patch(':id/paid')
   markAsPaid(
     @Param('id') id: string, 
@@ -52,6 +59,7 @@ export class OrderController {
     return this.orderService.markAsPaid(id, markOrderPaidDto);
   }
 
+  @Permission('order:remove')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.orderService.remove(id);

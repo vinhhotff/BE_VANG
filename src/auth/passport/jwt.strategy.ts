@@ -17,8 +17,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (req: Request) => {
-          return req.cookies.accessToken||req.cookies.refreshToken;
+          // Thêm logging để debug
+          const accessToken = req.cookies?.accessToken;
+          const refreshToken = req.cookies?.refreshToken;
+          
+          if (accessToken) {
+            return accessToken;
+          }
+          if (refreshToken) {
+            return refreshToken;
+          }
+          
+          return null;
         },
+        // Fallback to Authorization header
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
 
       ignoreExpiration: false,
@@ -26,11 +39,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: IUser) {
-    return {
-      _id: payload._id,
-      username: payload.name,
+  async validate(payload: any) {
+    
+    // Đảm bảo trả về đầy đủ thông tin user
+    const user = {
+      _id: payload._id || payload.sub,
+      name: payload.username || payload.name,
       email: payload.email,
+      role: payload.role,
     };
+    
+    return user;
   }
 }

@@ -191,7 +191,7 @@ export class OrderService {
         );
       } catch (error) {
         // Log error nhưng không throw để không ảnh hưởng đến việc cập nhật status
-        console.log('Lỗi khi cộng điểm loyalty:', error.message);
+        throw new BadRequestException('Lỗi khi cộng điểm loyalty:');
       }
     }
 

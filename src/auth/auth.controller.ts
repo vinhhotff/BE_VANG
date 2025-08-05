@@ -1,6 +1,6 @@
 import { Controller, Post, Body, UseGuards, Req, Request, Res, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { CustomMessage, Public, User } from './decoration/setMetadata';
+import { CustomMessage, Public, User, Permission } from './decoration/setMetadata';
 import { LocalAuthGuard } from './local-auth.guard';
 import { RegisterUserDto } from 'src/user/dto/create-user.dto';
 import { UserService } from 'src/user/user.service';
@@ -19,7 +19,7 @@ export class AuthController {
   @CustomMessage('Login User')
   login(@Request() req, @Res({ passthrough: true }) res: Response,
   ) {
-    return this.authService.login(req.user,res);
+    return this.authService.login(req.user, res);
   }
 
   @Post('register')
@@ -32,13 +32,31 @@ export class AuthController {
   @Public()
   @CustomMessage('Refresh Token')
   async refresh(@Res({ passthrough: true }) response: Response) {
-   const refreshToken = response.req.cookies['refreshToken'];
-   return this.authService.refreshToken(refreshToken, response);
+    const refreshToken = response.req.cookies['refreshToken'];
+    return this.authService.refreshToken(refreshToken, response);
   }
   @Post('logout')
   @CustomMessage('Logout User')
   @Public()
   async logout(@Res({ passthrough: true }) response: Response) {
     return this.authService.logout(response);
-}
+  }
+
+@Get('profile')
+  @CustomMessage('Get current user profile')
+  async getProfile(@User() user: any) {
+    if (!user || !user._id) {
+      return { error: 'User not found or not authenticated.' };
+    }
+    const fullUser = await this.userService.findUserWithRoleAndPermissions(user._id);
+    let permissions: string[] = [];
+    const role: any = (fullUser && typeof fullUser.role === 'object' && fullUser.role) ? fullUser.role : null;
+    if (role && Array.isArray(role.permissions)) {
+      permissions = role.permissions.map((p: any) => typeof p === 'object' ? p.name : p);
+    }
+    return {
+      user: fullUser,
+      permissions
+    };
+  }
 }

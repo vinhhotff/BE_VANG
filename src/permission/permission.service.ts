@@ -23,6 +23,11 @@ export class PermissionService {
     createPermissionDto: CreatePermissionDto,
     user: IUser
   ): Promise<Permission> {
+    // Kiểm tra user
+    if (!user || !user._id) {
+      throw new BadRequestException('User information is missing');
+    }
+
     // Kiểm tra xem permission đã tồn tại chưa
     const existingPermission = await this.permissionModel
       .findOne({

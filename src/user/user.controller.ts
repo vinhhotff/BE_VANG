@@ -30,7 +30,7 @@ export class UserController {
     return this.userService.createUser(createUserDto, user);
   }
 
-  // @Permission(PermissionEnum.USER_READ)
+  @Permission('user:findAll')
   @CustomMessage('Fetch List user with Paginate')
   @Get()
   async findAll(
@@ -41,14 +41,14 @@ export class UserController {
     return this.userService.findAll(+currentPage, +limit, qs);
   }
 
-  // @Permission(PermissionEnum.USER_READ_ID)
+  @Permission('user:findOne')
   @CustomMessage('Fetch user by ID')
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.userService.findOneID(id);
   }
 
-  // @Permission(PermissionEnum.USER_UPDATE)
+  @Permission('user:update')
   @CustomMessage('Update user by ID')
   @Patch(':id')
   update(
@@ -59,7 +59,7 @@ export class UserController {
     return this.userService.update(id, updateUserDto, user);
   }
 
-  // @Permission(PermissionEnum.USER_DELETE)
+  @Permission('user:remove')
   @CustomMessage('Delete user by ID')
   @Delete(':id')
   remove(@Param('id') id: string, @User() user: IUser) {

@@ -50,6 +50,7 @@ export class UserService {
         email,
         password: hashedPassword,
         phone,
+        avatarUrl: createUserDto.avatarUrl ,
         address,
         role: role || 'User',
         createdBy: {
@@ -188,6 +189,17 @@ export class UserService {
 
   async findUserByEmail(email: string): Promise<User | null> {
     return this.userModel.findOne({ email });
+  }
+
+  async findUserWithRoleAndPermissions(userId: string): Promise<User | null> {
+    return this.userModel.findById(userId)
+      .populate({
+        path: 'role',
+        populate: {
+          path: 'permissions'
+        }
+      })
+      .exec();
   }
 
   async register(user: RegisterUserDto) {
