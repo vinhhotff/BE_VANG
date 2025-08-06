@@ -22,7 +22,7 @@ export class PermissionController {
   constructor(private readonly permissionService: PermissionService) {}
 
   @CustomMessage('Tạo mới permission')
-  @Public()
+  @Permission('permission:create')
   @Post()
   create(
     @Body() createPermissionDto: CreatePermissionDto,

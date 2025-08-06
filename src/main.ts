@@ -33,7 +33,7 @@ async function bootstrap() {
     prefix: 'api/v',
     type: VersioningType.URI
   });
-   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+   app.useGlobalPipes(new ValidationPipe({ whitelist: true,transform: true, forbidNonWhitelisted: true }));
 
   await app.listen(port || 8080);
 }

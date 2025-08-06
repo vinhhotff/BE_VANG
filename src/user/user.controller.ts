@@ -24,7 +24,7 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @CustomMessage('Create new user')
-  @Permission('USER:CREATE')
+  @Permission('user:create')
   @Post()
   create(@Body() createUserDto: CreateUserDto, @User() user: IUser) {
     return this.userService.createUser(createUserDto, user);
