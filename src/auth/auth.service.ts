@@ -12,6 +12,8 @@ import { RegisterUserDto } from 'src/user/dto/create-user.dto';
 import { UserService } from 'src/user/user.service';
 import { Response } from 'express';
 import { IUser } from 'src/user/user.interface';
+import { Role } from 'src/role/schemas/role.schema';
+import { RoleService } from 'src/role/role.service';
 
 @Injectable()
 export class AuthService {
@@ -19,7 +21,8 @@ export class AuthService {
     @Inject(forwardRef(() => UserService)) // ✅ forwardRef ở đây
     private userService: UserService,
     private jwtService: JwtService,
-    private readonly configService: ConfigService // Thêm ConfigService nếu cần
+    private readonly configService: ConfigService, // Thêm ConfigService nếu cần
+    private roleService : RoleService
   ) {}
 
   async validateUser(email: string, pass: string): Promise<any> {
@@ -79,13 +82,14 @@ export class AuthService {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
+    const findNameRole= await this.roleService.findById(user.role);
     return {
       accessToken,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
-        role:user.role,
+        role:findNameRole.name,
       },
     };
   }

@@ -17,6 +17,8 @@ import { User, UserDocument } from './schemas/user.schema';
 import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import mongoose, { Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
+import { Role } from 'src/role/schemas/role.schema';
+import path from 'path';
 @Injectable()
 export class UserService {
   constructor(
@@ -116,11 +118,11 @@ export class UserService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid ID format');
     }
-    const user = this.userModel.findById(id).exec();
+    const user = this.userModel.findById(id).populate({path:'role'}).exec();
     if (!user) {
       throw new BadRequestException('User not found');
     }
-    return user;
+    return user; 
   }
 
   async update(id: string, updateUserDto: UpdateUserDto, user: IUser) {

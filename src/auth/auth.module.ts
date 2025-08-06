@@ -8,6 +8,8 @@ import { UserModule } from 'src/user/user.module';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './passport/jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { RoleService } from 'src/role/role.service';
+import { RoleModule } from 'src/role/role.module';
 
 @Module({
   imports: [
@@ -24,6 +26,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       }),
       inject: [ConfigService],
     }),
+    RoleModule
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy],

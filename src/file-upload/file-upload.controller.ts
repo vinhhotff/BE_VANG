@@ -14,7 +14,6 @@ import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import Multer from 'multer';
 
 @ApiTags('File Upload')
 @Controller('file/upload')
