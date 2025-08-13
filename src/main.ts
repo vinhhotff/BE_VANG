@@ -11,6 +11,8 @@ import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { HttpExceptionFilter } from './common/interceptors/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { join } from 'path';
+import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -19,6 +21,7 @@ async function bootstrap() {
   app.useGlobalGuards(new JwtAuthGuard(reflector));
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor(reflector));
+  app.useStaticAssets(join(__dirname, '..', 'public', 'uploads'), { prefix: '/uploads/' });
   const configService = app.get(ConfigService);
   const port = configService.get<string>('PORT');
   app.enableCors({
@@ -26,6 +29,8 @@ async function bootstrap() {
   origin: configService.get<string>('FE_URL') || 'http://localhost:3000',
   credentials: true,
 });
+ app.use(bodyParser.json({ limit: '10mb' }));
+  app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
   app.use(helmet());
   app.enableVersioning({

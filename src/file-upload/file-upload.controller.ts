@@ -50,7 +50,7 @@ export class FileUploadController {
         cb(null, true);
       },
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB
+        fileSize: 30 * 1024 * 1024, // 10MB
       },
     })
   )
@@ -74,7 +74,7 @@ export class FileUploadController {
       throw new BadRequestException('Vui lòng chọn file để upload');
     }
 
-    return this.fileUploadService.uploadFile(file, folder);
+    return await this.fileUploadService.uploadFile(file, folder);
   }
 
   // Upload multiple files với folder cụ thể
@@ -107,7 +107,7 @@ export class FileUploadController {
         cb(null, true);
       },
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB
+        fileSize: 30 * 1024 * 1024, // 10MB
       },
     })
   )
@@ -166,7 +166,7 @@ export class FileUploadController {
         cb(null, true);
       },
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB
+        fileSize: 30 * 1024 * 1024, // 10MB
       },
     })
   )
@@ -183,6 +183,9 @@ export class FileUploadController {
     },
   })
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    return this.fileUploadService.uploadFile(file, 'default');
+    if (!file) {
+      throw new BadRequestException('Vui lòng chọn file để upload');
+    }
+    return await this.fileUploadService.uploadFile(file, 'default');
   }
 }

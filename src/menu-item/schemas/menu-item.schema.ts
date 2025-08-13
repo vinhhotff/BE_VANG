@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import mongoose, { Document } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 export type MenuItemDocument = MenuItem & Document;
 
@@ -11,8 +11,8 @@ export class MenuItem extends Document {
   @Prop()
   description?: string;
 
-  @Prop({ type: [String], default: [] })
-  images: string[]; // URL ảnh
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'File' }], default: [] })
+  images: Types.ObjectId[]; // Reference to File documents
 
   @Prop({ required: true, min: 0 })
   price: number;
@@ -63,7 +63,7 @@ export interface IMenuItem {
   _id: string;
   name: string;
   description?: string;
-  images?: string[];
+  images?: Types.ObjectId[]; // Change to Types.ObjectId[] if you want to keep types consistent
   price: number;
   available: boolean;
   category: string;

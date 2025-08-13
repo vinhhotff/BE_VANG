@@ -10,7 +10,7 @@ export class CreateMenuItemDto {
 
   @IsOptional()
   @IsArray()
-  images?: string[];
+  images?: string[]; // File ObjectIds
 
   @IsNumber()
   price: number;

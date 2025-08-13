@@ -52,7 +52,7 @@ export class UserService {
         email,
         password: hashedPassword,
         phone,
-        avatarUrl: createUserDto.avatarUrl ,
+        avatar: createUserDto.avatar,
         address,
         role: role || 'User',
         createdBy: {
@@ -125,7 +125,7 @@ export class UserService {
     return user; 
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto, user: IUser) {
+  async update(id: string, updateUserDto: UpdateUserDto, user?: IUser) {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid ID format');
     }
@@ -135,10 +135,12 @@ export class UserService {
     } else {
       const updatedUser = {
         ...updateUserDto,
-        updatedBy: {
-          _id: user._id,
-          email: user.email,
-        },
+        updatedBy: user
+          ? {
+              _id: user._id,
+              email: user.email,
+            }
+          : undefined,
       };
       const updated = await this.userModel
         .findByIdAndUpdate(id, updatedUser, { new: true })

@@ -7,6 +7,8 @@ import {
   Param,
   Delete,
   Query,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -17,11 +19,16 @@ import {
   Permission,
 } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { FileUploadService } from '../file-upload/file-upload.service';
 
 // import { User } from '../decorate/setMetadata';
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly fileUploadService: FileUploadService,
+  ) {}
 
   @CustomMessage('Create new user')
   @Permission('user:create')
@@ -64,5 +71,16 @@ export class UserController {
   @Delete(':id')
   remove(@Param('id') id: string, @User() user: IUser) {
     return this.userService.remove(id, user);
+  }
+
+  @Patch(':id/avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAvatar(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File
+  ) {
+    const fileDoc = await this.fileUploadService.uploadFile(file, 'avatars');
+    return this.userService.update(id, { avatar: fileDoc._id.toString()
+ }, undefined);
   }
 }

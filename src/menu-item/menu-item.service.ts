@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { MenuItem, MenuItemDocument } from './schemas/menu-item.schema';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
+import { IUser } from 'src/user/user.interface';
 
 @Injectable()
 export class MenuItemService {
@@ -11,10 +12,14 @@ export class MenuItemService {
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>,
   ) {}
 
-  async create(createMenuItemDto: CreateMenuItemDto): Promise<MenuItem> {
+  async create(createMenuItemDto: CreateMenuItemDto, user: IUser): Promise<MenuItem> {
     const menuItem = new this.menuItemModel({
       ...createMenuItemDto,
       available: createMenuItemDto.isAvailable ?? true,
+      createdBy: {
+        _id: user._id,
+        email: user.email,
+      },
     });
     return menuItem.save();
   }
@@ -43,7 +48,7 @@ export class MenuItemService {
       .exec();
   }
 
-  async update(id: string, updateMenuItemDto: UpdateMenuItemDto): Promise<MenuItem> {
+  async update(id: string, updateMenuItemDto: UpdateMenuItemDto, user: IUser): Promise<MenuItem> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid menu item ID format');
     }
@@ -53,6 +58,10 @@ export class MenuItemService {
       ...(updateMenuItemDto.isAvailable !== undefined && {
         available: updateMenuItemDto.isAvailable,
       }),
+      updatedBy: {
+        _id: user._id,
+        email: user.email,
+      },
     };
 
     const menuItem = await this.menuItemModel

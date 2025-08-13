@@ -7,9 +7,15 @@ import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { Request } from 'express';
 import { promises as fs } from 'fs';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { File, FileDocument } from './schemas/file.schema';
 
 @Injectable()
 export class FileUploadService {
+  constructor(
+    @InjectModel(File.name) private fileModel: Model<FileDocument>,
+  ) {}
   // Cấu hình multer storage
   getMulterOptions(folderName?: string) {
     return {
@@ -67,35 +73,22 @@ export class FileUploadService {
   }
 
   // Xử lý upload file
-  async uploadFile(file: Express.Multer.File, folder?: string) {
+  async uploadFile(file: Express.Multer.File, folder?: string, userId?: string): Promise<FileDocument> {
     try {
       if (!file) {
         throw new BadRequestException('Not any file is upload');
       }
-
-      const originalName = Buffer.from(file.originalname, 'latin1').toString(
-        'utf8'
-      );
-
-      // Ví dụ: lưu metadata vào file json
-      const metadata = {
-        originalName,
+      const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      const url = `/uploads/${folder || 'default'}/${file.filename}`;
+      const fileDoc = new this.fileModel({ // Use filename as ID for simplicity
         filename: file.filename,
-        size: file.size,
+        url,
         mimetype: file.mimetype,
-      };
-
-      const metadataPath = `./public/uploads/${folder || 'default'}/${file.filename}.json`;
-      await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
-
-      return {
-        message: 'Upload file Success',
-        data: {
-          ...metadata,
-          path: file.path,
-          url: `/uploads/${folder || 'default'}/${file.filename}`,
-        },
-      };
+        size: file.size,
+        uploader: userId, // Add if you want to track uploader
+      });
+      await fileDoc.save();
+      return fileDoc;
     } catch (error) {
       throw new BadRequestException(`Error upload file: ${error.message}`);
     }

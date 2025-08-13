@@ -29,7 +29,7 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsString()
-  avatarUrl?: string;
+  avatar?: string; // File ObjectId
 
   @IsOptional()
   @IsString()

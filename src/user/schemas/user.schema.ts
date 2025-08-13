@@ -26,8 +26,8 @@ export class User extends mongoose.Document {
   @Prop()
   address?: string;
 
-  @Prop()
-  avatarUrl?: string;
+  @Prop({ type: Types.ObjectId, ref: 'File' })
+  avatar?: Types.ObjectId; // Reference to File document
 
   @Prop({
     type: [{ type: mongoose.Types.ObjectId, ref: 'Payment' }],
