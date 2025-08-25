@@ -5,7 +5,7 @@ import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 export type RoleDocument = HydratedDocument<Role>;
 
 @Schema({ timestamps: true })
-export class Role extends mongoose.Document {
+export class Role {
   @Prop({ required: true, unique: true })
   name: string; // ví dụ: 'admin', 'staff', 'guest'
 
@@ -30,14 +30,20 @@ export class Role extends mongoose.Document {
     email: string;
   };
 
-// Timestamps are automatically handled by Mongoose when timestamps: true
+  // Timestamps tự động được Mongoose thêm khi có { timestamps: true }
   createdAt: Date;
   updatedAt: Date;
 
-  // Soft delete fields are handled by the plugin
+  // Soft delete fields (do plugin thêm)
   isDeleted?: boolean;
   deletedAt?: Date;
 }
 
 export const RoleSchema = SchemaFactory.createForClass(Role);
 RoleSchema.plugin(softDeletePlugin);
+
+export enum DefaultRole {
+  SuperAdmin = 'super-admin',
+  Admin = 'admin',
+  User = 'user',
+}

@@ -1,10 +1,12 @@
 import {
   IsEmail,
+  IsMongoId,
   IsNotEmpty,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
+import mongoose from 'mongoose';
 
 export class CreateUserDto {
   @IsOptional()
@@ -32,7 +34,8 @@ export class CreateUserDto {
   avatar?: string; // File ObjectId
 
   @IsOptional()
-  @IsString()
+  @IsMongoId({ message: 'role phải là một Mongo ObjectId hợp lệ' })
+
   role?: string; // có thể là ObjectId dưới dạng string
 }
 export class RegisterUserDto {

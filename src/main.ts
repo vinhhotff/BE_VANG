@@ -13,6 +13,8 @@ import { HttpExceptionFilter } from './common/interceptors/http-exception.filter
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { join } from 'path';
 import * as bodyParser from 'body-parser';
+import { DocumentBuilder } from '@nestjs/swagger/dist/document-builder';
+import { SwaggerModule } from '@nestjs/swagger/dist/swagger-module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -25,11 +27,15 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<string>('PORT');
   app.enableCors({
-  allowedHeaders: ['content-type', 'authorization'],
-  origin: configService.get<string>('FE_URL') || 'http://localhost:3000',
-  credentials: true,
-});
- app.use(bodyParser.json({ limit: '10mb' }));
+    allowedHeaders: ['content-type', 'authorization'],
+    origin: configService.get<string>('FE_URL') || 'http://localhost:3000',
+    credentials: true,
+  });
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  });
+
+  app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
   app.use(helmet());
@@ -38,7 +44,15 @@ async function bootstrap() {
     prefix: 'api/v',
     type: VersioningType.URI
   });
-   app.useGlobalPipes(new ValidationPipe({ whitelist: true,transform: true, forbidNonWhitelisted: true }));
+  const config = new DocumentBuilder()
+    .setTitle('File Upload & Management API')
+    .setDescription('Complete file upload system with MongoDB integration')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document);
+
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
 
   await app.listen(port || 8080);
 }

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { PermissionService } from './permission.service';
 import { CreatePermissionDto } from './dto/create-permission.dto';
-import { UpdatePermissionDto } from './dto/update-permission.dto';
+import { UpdatePermissionDto, UpdateRolePermissionsByNameDto } from './dto/update-permission.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User, CustomMessage, Permission, Public } from '../auth/decoration/setMetadata';
 import { IUser } from '../user/user.interface';
@@ -19,7 +19,7 @@ import { IUser } from '../user/user.interface';
 @Controller('permissions')
 @UseGuards(JwtAuthGuard)
 export class PermissionController {
-  constructor(private readonly permissionService: PermissionService) {}
+  constructor(private readonly permissionService: PermissionService) { }
 
   @CustomMessage('Tạo mới permission')
   @Permission('permission:create')
@@ -87,4 +87,21 @@ export class PermissionController {
   getAllPermissions() {
     return this.permissionService.getAllPermissions();
   }
+
+
+  @CustomMessage('Thêm permissions vào role bằng tên')
+  @Patch(':id/permissions/by-name')
+  addPermissionsByName(
+    @Param('id') id: string,
+    @Body() updateRolePermissionsByNameDto: UpdateRolePermissionsByNameDto,
+    @User() user: IUser
+  ) {
+    return this.permissionService.addPermissionsToRoleByName(
+      id,
+      updateRolePermissionsByNameDto,
+      user
+    );
+  }
+
 }
+  // @Permission('role:addPermissions')

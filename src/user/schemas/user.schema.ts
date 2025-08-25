@@ -1,12 +1,13 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument, Types } from 'mongoose';
 import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 export type UserDocument = HydratedDocument<User>;
 
 @Schema({ timestamps: true })
 export class User extends mongoose.Document {
-  @Prop({ required: true })
-  name: string;
+  @Prop()
+  name?: string;
 
   @Prop({ required: true, unique: true })
   email: string;
@@ -25,9 +26,8 @@ export class User extends mongoose.Document {
 
   @Prop()
   address?: string;
-
-  @Prop({ type: Types.ObjectId, ref: 'File' })
-  avatar?: Types.ObjectId; // Reference to File document
+  @ApiProperty()
+  avatar?: string;
 
   @Prop({
     type: [{ type: mongoose.Types.ObjectId, ref: 'Payment' }],

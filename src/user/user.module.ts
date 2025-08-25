@@ -8,7 +8,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 // 👇 Nếu có import AuthModule
 import { AuthModule } from 'src/auth/auth.module';
-import { FileUploadModule } from 'src/file-upload/file-upload.module';
+import { FileModule } from 'src/file/file.module';
 
 @Module({
   imports: [
@@ -27,7 +27,7 @@ import { FileUploadModule } from 'src/file-upload/file-upload.module';
       inject: [ConfigService],
     }),
     forwardRef(() => AuthModule), // ✅ Chỉ thêm nếu có vòng lặp
-    FileUploadModule,
+    FileModule,
   ],
   controllers: [UserController],
   providers: [UserService],

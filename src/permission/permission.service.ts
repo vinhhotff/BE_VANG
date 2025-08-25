@@ -8,15 +8,19 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Permission, PermissionDocument } from './schemas/permission.schema';
 import { CreatePermissionDto } from './dto/create-permission.dto';
-import { UpdatePermissionDto } from './dto/update-permission.dto';
+import { UpdatePermissionDto, UpdateRolePermissionsByNameDto } from './dto/update-permission.dto';
 import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import { IUser } from '../user/user.interface';
+import { RoleModule } from 'src/role/role.module';
+import { Role } from 'src/role/schemas/role.schema';
 
 @Injectable()
 export class PermissionService {
   constructor(
     @InjectModel(Permission.name)
-    private permissionModel: SoftDeleteModel<PermissionDocument>
+    private permissionModel: SoftDeleteModel<PermissionDocument>,
+    @InjectModel(Role.name)
+    private readonly roleModel: Model<Role>, // Sử dụng đúng interface/schema cho Role
   ) {}
 
   async create(
@@ -211,6 +215,77 @@ export class PermissionService {
   async getAllPermissions(): Promise<Permission[]> {
     return this.permissionModel.find().exec();
   }
+
+ async addPermissionsToRoleByName(
+  roleId: string,
+  dto: { permissionNames: string[] },
+  user: IUser,
+): Promise<Role> {
+  if (!Types.ObjectId.isValid(roleId)) {
+    throw new BadRequestException('ID role không hợp lệ');
+  }
+
+  const { permissionNames } = dto;
+
+  // Tìm role theo ID
+  const role = await this.roleModel.findById(roleId).exec();
+  if (!role) {
+    throw new NotFoundException(`Role với ID ${roleId} không tồn tại`);
+  }
+
+  // Tìm tất cả permissions theo tên
+  const permissions = await this.permissionModel.find({
+    name: { $in: permissionNames },
+  });
+
+  if (permissions.length !== permissionNames.length) {
+    const foundNames = permissions.map((p) => p.name);
+    const missing = permissionNames.filter((n) => !foundNames.includes(n));
+    throw new BadRequestException(
+      `Các permission sau không tồn tại: ${missing.join(', ')}`
+    );
+  }
+
+  const validPermissionIds = permissions.map((p) => p._id.toString());
+
+  // Lấy danh sách permission hiện tại
+  const existingPermissions = role.permissions?.map((p) => p.toString()) ?? [];
+
+  // Lọc những permission mới chưa có
+  const newPermissions = validPermissionIds.filter(
+    (permId) => !existingPermissions.includes(permId)
+  );
+
+  if (newPermissions.length === 0) {
+    throw new BadRequestException('Tất cả permissions đã có trong role này');
+  }
+
+  // Cập nhật role
+  const updatedRole = await this.roleModel
+    .findByIdAndUpdate(
+      roleId,
+      {
+        $addToSet: { permissions: { $each: newPermissions } },
+        updatedBy: {
+          _id: user._id,
+          email: user.email,
+        },
+      },
+      { new: true }
+    )
+    .populate({
+      path: 'permissions',
+      select: '_id name description',
+    })
+    .exec();
+
+  if (!updatedRole) {
+    throw new NotFoundException(`Không tìm thấy role với ID ${roleId}`);
+  }
+
+  return updatedRole;
+}
+
 }
 
 export default PermissionService;

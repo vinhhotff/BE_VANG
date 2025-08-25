@@ -8,6 +8,7 @@ import {
   ValidationArguments,
   ValidationOptions,
 } from 'class-validator';
+import { Role } from 'src/role/schemas/role.schema';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
@@ -24,6 +25,8 @@ export const User = createParamDecorator(
     return request.user;
   }
 );
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
 
 export const PERMISSION_KEY = 'permission';
 export const Permission = (permission: string) =>

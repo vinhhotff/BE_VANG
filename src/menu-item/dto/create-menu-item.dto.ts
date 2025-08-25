@@ -1,4 +1,12 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, IsArray } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { 
+  IsString, 
+  IsNumber, 
+  IsOptional, 
+  IsBoolean, 
+  IsArray, 
+  Min 
+} from 'class-validator';
 
 export class CreateMenuItemDto {
   @IsString()
@@ -10,16 +18,54 @@ export class CreateMenuItemDto {
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })   // đảm bảo từng phần tử là string (ObjectId)
   images?: string[]; // File ObjectIds
 
+  @Transform(({ value }) => Number(value))
   @IsNumber()
+  @Min(0)
   price: number;
 
-  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+  })
   @IsBoolean()
-  isAvailable?: boolean;
+  available: boolean;
+
+  @IsString()
+  category: string; // VD: Món chính, Tráng miệng
 
   @IsOptional()
-  @IsString()
-  category?: string;
+  @Transform(({ value }) => Number(value))
+  @IsNumber()
+  @Min(0)
+  preparationTime?: number; // minutes
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allergens?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+  })
+  @IsBoolean()
+  isVegetarian?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+  })
+  @IsBoolean()
+  isVegan?: boolean;
 }

@@ -4,21 +4,30 @@ import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 export type MenuItemDocument = MenuItem & Document;
 
 @Schema({ timestamps: true })
-export class MenuItem extends Document {
+export class MenuItem {
   @Prop({ required: true })
   name: string;
 
   @Prop()
   description?: string;
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'File' }], default: [] })
-  images: Types.ObjectId[]; // Reference to File documents
+  @Prop()
+  images?: []; // Reference to File documents
 
   @Prop({ required: true, min: 0 })
   price: number;
 
-  @Prop({ default: true })
+  @Prop({
+    default: true,
+    set: (value: any) => {
+      if (typeof value === 'string') {
+        return value.toLowerCase() === 'true';
+      }
+      return Boolean(value);
+    },
+  })
   available: boolean;
+
 
   @Prop({ required: true })
   category: string; // VD: Món chính, Tráng miệng

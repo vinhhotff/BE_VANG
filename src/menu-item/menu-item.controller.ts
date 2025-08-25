@@ -11,40 +11,40 @@ import {
   UseInterceptors,
   UploadedFiles,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { Permission } from '../auth/decoration/setMetadata';
 import { MenuItemService } from './menu-item.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { FileUploadService } from '../file-upload/file-upload.service';
 import { IUser } from 'src/user/user.interface';
-import { File } from '../file-upload/schemas/file.schema';
+import { ParseFilePipeDocument } from 'src/file/upload.validator';
+import { PermissionGuard } from 'src/permission/permission.guard';
 
 @Controller('menu-items')
 export class MenuItemController {
   constructor(
     private readonly menuItemService: MenuItemService,
-    private readonly fileUploadService: FileUploadService,
-  ) {}
+  ) { }
 
   @Permission('menuItem:create')
   @Post()
-  @UseInterceptors(FilesInterceptor('images', 10))
+  @UseInterceptors(FilesInterceptor('images', 5)) // tối đa 5 ảnh
   async create(
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles(ParseFilePipeDocument) files: Express.Multer.File[],
     @Body() createMenuItemDto: CreateMenuItemDto,
     @Req() req: { user: IUser },
   ) {
-    if (files && files.length > 0) {
-      const fileDocs: File[] = await Promise.all(
-        files.map(file => this.fileUploadService.uploadFile(file, 'menu-item-images', req.user._id.toString()))
-      );
-      const fileIds = fileDocs.map(file => file._id.toString());
-      createMenuItemDto.images = fileIds;
-    }
-    return this.menuItemService.create(createMenuItemDto, req.user);
+    const imageNames = files.map((f) => f.filename);
+
+    // truyền xuống service để lưu DB
+    return this.menuItemService.create(
+      { ...createMenuItemDto, images: imageNames },
+      req.user,
+    );
   }
+
 
   @Permission('menuItem:findAll')
   @Get()
@@ -75,13 +75,17 @@ export class MenuItemController {
   }
 
   @Permission('menuItem:update')
+  @UseGuards(PermissionGuard)
   @Patch(':id')
-  update(
+  @UseInterceptors(FilesInterceptor('images', 10)) // cho phép upload tối đa 10 file
+  async update(
     @Param('id') id: string,
     @Body() updateMenuItemDto: UpdateMenuItemDto,
+    @UploadedFiles() files: Express.Multer.File[], // nhận file ảnh
     @Req() req: { user: IUser },
   ) {
-    return this.menuItemService.update(id, updateMenuItemDto, req.user);
+    // nếu có file thì map thành mảng ObjectId (sau khi lưu ở service)
+    return this.menuItemService.update(id, updateMenuItemDto, req.user, files);
   }
 
   @Permission('menuItem:updateAvailability')
@@ -98,25 +102,32 @@ export class MenuItemController {
   remove(@Param('id') id: string) {
     return this.menuItemService.remove(id);
   }
-
-  @Permission('menuItem:uploadImages')
+  // Thêm ảnh vào MenuItem
+  @Permission('menuItem:update')
+  @UseGuards(PermissionGuard)
   @Patch(':id/images')
-  @UseInterceptors(FilesInterceptor('images', 10))
-  async uploadImages(
+  @UseInterceptors(FilesInterceptor('images', 10)) // upload tối đa 10 file
+  async addImages(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
     @Req() req: { user: IUser },
   ) {
-    const fileDocs: File[] = await Promise.all(
-      files.map(file => this.fileUploadService.uploadFile(file, 'menu-item-images', req.user._id.toString()))
-    );
-    const newFileIds = fileDocs.map(file => file._id.toString());
-
-    const menuItem = await this.menuItemService.findById(id);
-    const existingImageIds = menuItem.images ? menuItem.images.map(imgId => imgId.toString()) : [];
-    
-    const updatedImages = [...existingImageIds, ...newFileIds];
-
-    return this.menuItemService.update(id, { images: updatedImages }, req.user);
+    // Lấy filenames từ files đã upload
+    const filenames = files.map(file => file.filename); // hoặc file.path nếu lưu đường dẫn
+    return this.menuItemService.addImages(id, filenames, req.user);
   }
+
+  // Xóa một ảnh khỏi MenuItem
+  @Permission('menuItem:update')
+  @UseGuards(PermissionGuard)
+  @Delete(':id/images/:filename')
+  async removeImage(
+    @Param('id') id: string,
+    @Param('filename') filename: string,
+    @Req() req: { user: IUser },
+  ) {
+    return this.menuItemService.removeImage(id, filename, req.user);
+  }
+
 }
+

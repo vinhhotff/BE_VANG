@@ -20,15 +20,15 @@ import {
 } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { FileUploadService } from '../file-upload/file-upload.service';
+import { ParseFilePipeDocument } from 'src/file/upload.validator';
+
 
 // import { User } from '../decorate/setMetadata';
 @Controller('user')
 export class UserController {
   constructor(
     private readonly userService: UserService,
-    private readonly fileUploadService: FileUploadService,
-  ) {}
+  ) { }
 
   @CustomMessage('Create new user')
   @Permission('user:create')
@@ -74,13 +74,12 @@ export class UserController {
   }
 
   @Patch(':id/avatar')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File
+    @UploadedFile(ParseFilePipeDocument) file: Express.Multer.File,
   ) {
-    const fileDoc = await this.fileUploadService.uploadFile(file, 'avatars');
-    return this.userService.update(id, { avatar: fileDoc._id.toString()
- }, undefined);
+    return this.userService.update(id, { avatar: file.filename }, undefined);
   }
+
 }
