@@ -5,18 +5,21 @@ import { extname } from 'path';
 export class ParseFilePipeDocument implements PipeTransform {
   private readonly allowedExtensions = ['.png', '.pdf', '.jpeg', '.jpg'];
 
-  transform(value: Express.Multer.File | Express.Multer.File[]): Express.Multer.File | Express.Multer.File[] {
+  transform(value: Express.Multer.File[] | Express.Multer.File): Express.Multer.File[] {
     if (!value) {
       throw new BadRequestException('File(s) are required');
     }
-
+    // Nếu chỉ có 1 file, ép thành mảng
     const files = Array.isArray(value) ? value : [value];
+
+    if (files.length === 0) {
+      throw new BadRequestException('File(s) are required');
+    }
 
     for (const file of files) {
       if (!file?.originalname) {
         throw new BadRequestException('Invalid file');
       }
-
       const extension = extname(file.originalname).toLowerCase();
       if (!this.allowedExtensions.includes(extension)) {
         throw new BadRequestException(
@@ -25,6 +28,6 @@ export class ParseFilePipeDocument implements PipeTransform {
       }
     }
 
-    return value;
+    return files;
   }
 }
