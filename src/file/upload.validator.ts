@@ -3,9 +3,18 @@ import { extname } from 'path';
 
 @Injectable()
 export class ParseFilesPipe implements PipeTransform {
-  private readonly allowedExtensions = ['.png', '.pdf', '.jpeg', '.jpg','.avg','.avif'];
+  private readonly allowedExtensions = [
+    '.png',
+    '.pdf',
+    '.jpeg',
+    '.jpg',
+    '.avg',
+    '.avif',
+  ];
 
-  transform(value: Express.Multer.File | Express.Multer.File[]): Express.Multer.File[] {
+  transform(
+    value: Express.Multer.File | Express.Multer.File[]
+  ): Express.Multer.File[] {
     console.log('FILES RECEIVED:', value);
 
     if (!value) {

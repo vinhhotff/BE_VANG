@@ -20,6 +20,7 @@ import { QROrderModule } from './qr-order/qr-order.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { TableModule } from './table/table.module';
 import { FileModule } from './file/file.module';
+import { AboutModule } from './about/about.module';
 
 @Module({
   imports: [
@@ -45,7 +46,7 @@ import { FileModule } from './file/file.module';
     ReservationModule,
     QROrderModule,
     AnalyticsModule,
-    TableModule,FileModule, FileModule
+    TableModule,FileModule, FileModule, AboutModule
   ],
   controllers: [AppController],
   providers: [
