@@ -20,7 +20,7 @@ import {
 } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ParseFilePipeDocument } from 'src/file/upload.validator';
+import { ParseFilesPipe  } from 'src/file/upload.validator';
 
 
 // import { User } from '../decorate/setMetadata';
@@ -77,7 +77,7 @@ export class UserController {
   @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(
     @Param('id') id: string,
-    @UploadedFile(ParseFilePipeDocument) file: Express.Multer.File,
+    @UploadedFile(ParseFilesPipe ) file: Express.Multer.File,
   ) {
     return this.userService.update(id, { avatar: file.filename }, undefined);
   }

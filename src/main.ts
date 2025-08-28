@@ -23,7 +23,11 @@ async function bootstrap() {
   app.useGlobalGuards(new JwtAuthGuard(reflector));
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor(reflector));
-  app.useStaticAssets(join(__dirname, '..', 'public', 'uploads'), { prefix: '/uploads/' });
+  app.useStaticAssets(join(__dirname, '..', 'public'), {
+    prefix: '/public', // đổi prefix cho rõ ràng
+  });
+  console.log(join(__dirname, '..', 'public'));
+
   const configService = app.get(ConfigService);
   const port = configService.get<string>('PORT');
   app.enableCors({
@@ -31,10 +35,6 @@ async function bootstrap() {
     origin: configService.get<string>('FE_URL') || 'http://localhost:3000',
     credentials: true,
   });
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads/',
-  });
-
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 

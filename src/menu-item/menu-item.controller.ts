@@ -15,13 +15,13 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import { Permission } from '../auth/decoration/setMetadata';
+import { Permission, Public } from '../auth/decoration/setMetadata';
 import { MenuItemService } from './menu-item.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { IUser } from 'src/user/user.interface';
-import { ParseFilePipeDocument } from 'src/file/upload.validator';
+import { ParseFilesPipe  } from 'src/file/upload.validator';
 import { PermissionGuard } from 'src/permission/permission.guard';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
@@ -34,7 +34,7 @@ export class MenuItemController {
   @Post()
   @UseInterceptors(FilesInterceptor('images', 5)) // tối đa 5 ảnh
   async create(
-    @UploadedFiles(ParseFilePipeDocument) files: Express.Multer.File[],
+    @UploadedFiles(ParseFilesPipe ) files: Express.Multer.File[],
     @Body() createMenuItemDto: CreateMenuItemDto,
     @Req() req: { user: IUser },
   ) {
@@ -47,8 +47,8 @@ export class MenuItemController {
     );
   }
 
-  @Permission('menuItem:findAll')
   @Get()
+  @Public()
   findAll(
     @Query('category') category?: string,
     @Query('available') available?: string,
@@ -104,13 +104,18 @@ export class MenuItemController {
     return this.menuItemService.remove(id);
   }
 
-  @Patch(':id/images')
-  @UseInterceptors(FilesInterceptor('images', 10))
+  @Post(':id/images')
+  @UseInterceptors(FilesInterceptor('images', 5))
   async addImages(
     @Param('id') id: string,
-    @UploadedFiles(ParseFilePipeDocument) files: Express.Multer.File[], // luôn array
+    @UploadedFiles(ParseFilesPipe ) files: Express.Multer.File[],
     @Req() req: { user: IUser },
   ) {
+    console.log('FILES RECEIVED:', files);
+
+    if (!files || files.length === 0) {
+      throw new BadRequestException('File(s) are required');
+    }
     const filenames = files.map((file) => file.filename);
     return this.menuItemService.addImages(id, filenames, req.user);
   }

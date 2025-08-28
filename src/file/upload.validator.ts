@@ -2,14 +2,17 @@ import { BadRequestException, Injectable, PipeTransform } from '@nestjs/common';
 import { extname } from 'path';
 
 @Injectable()
-export class ParseFilePipeDocument implements PipeTransform {
-  private readonly allowedExtensions = ['.png', '.pdf', '.jpeg', '.jpg'];
+export class ParseFilesPipe implements PipeTransform {
+  private readonly allowedExtensions = ['.png', '.pdf', '.jpeg', '.jpg','.avg','.avif'];
 
-  transform(value: Express.Multer.File[] | Express.Multer.File): Express.Multer.File[] {
+  transform(value: Express.Multer.File | Express.Multer.File[]): Express.Multer.File[] {
+    console.log('FILES RECEIVED:', value);
+
     if (!value) {
       throw new BadRequestException('File(s) are required');
     }
-    // Nếu chỉ có 1 file, ép thành mảng
+
+    // Convert single file to array for consistent handling
     const files = Array.isArray(value) ? value : [value];
 
     if (files.length === 0) {
