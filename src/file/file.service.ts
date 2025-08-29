@@ -1,26 +1,54 @@
-import { Injectable } from '@nestjs/common';
-import { CreateFileDto } from './dto/create-file.dto';
-import { UpdateFileDto } from './dto/update-file.dto';
+// src/file/file.service.ts
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { SupabaseConfig } from '../config/supabase.config';
+import { Express } from 'express';
 
 @Injectable()
 export class FileService {
-  create(createFileDto: CreateFileDto) {
-    return 'This action adds a new file';
+  private bucket = 'uploads';
+
+  constructor(private supabaseConfig: SupabaseConfig) {} // inject service
+
+  async uploadFile(file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded');
+
+    const supabase = this.supabaseConfig.getClient();
+    const fileName = `${Date.now()}-${file.originalname}`;
+
+    const { data, error } = await supabase.storage
+      .from(this.bucket)
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (error) throw new BadRequestException(error.message);
+
+    const { data: publicUrlData, error: urlError } = supabase.storage
+      .from(this.bucket)
+      .getPublicUrl(fileName);
+
+    if (urlError) throw new BadRequestException(urlError.message);
+
+    return {
+      name: file.originalname,
+      path: data?.path,
+      url: publicUrlData.publicUrl,
+    };
   }
 
-  findAll() {
-    return `This action returns all file`;
+  async uploadFiles(files: Express.Multer.File[]) {
+    return Promise.all(files.map((file) => this.uploadFile(file)));
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} file`;
-  }
+  async remove(filePath: string) {
+    const supabase = this.supabaseConfig.getClient();
+    const { error } = await supabase.storage
+      .from(this.bucket)
+      .remove([filePath]);
 
-  update(id: number, updateFileDto: UpdateFileDto) {
-    return `This action updates a #${id} file`;
-  }
+    if (error) throw new BadRequestException(error.message);
 
-  remove(id: number) {
-    return `This action removes a #${id} file`;
+    return { message: 'File deleted', filePath };
   }
 }

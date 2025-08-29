@@ -8,7 +8,6 @@ import { UserModule } from 'src/user/user.module';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './passport/jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { RoleService } from 'src/role/role.service';
 import { RoleModule } from 'src/role/role.module';
 import { MongooseModule } from '@nestjs/mongoose/dist/mongoose.module';
 import { User, UserSchema } from 'src/user/schemas/user.schema';
@@ -29,10 +28,9 @@ import { User, UserSchema } from 'src/user/schemas/user.schema';
       inject: [ConfigService],
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]), // <-- thêm dòng này
-
-    RoleModule
+    RoleModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy],
 })
-export class AuthModule { }
+export class AuthModule {}

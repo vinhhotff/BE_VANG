@@ -1,12 +1,15 @@
 import { Controller, Get, Patch, Param, Body } from '@nestjs/common';
 import { AboutService } from './about.service';
 import { About, IAbout, ISection } from './schemas/about.schema';
+import { CustomMessage, Public } from 'src/auth/decoration/setMetadata';
 
 @Controller('about')
 export class AboutController {
   constructor(private readonly aboutService: AboutService) {}
 
   @Get()
+  @Public()
+  @CustomMessage('Lấy thông tin About thành công')
   async getAbout(): Promise<About> {
     return this.aboutService.getAbout();
   }

@@ -46,7 +46,10 @@ import { AboutModule } from './about/about.module';
     ReservationModule,
     QROrderModule,
     AnalyticsModule,
-    TableModule,FileModule, FileModule, AboutModule
+    TableModule,
+    FileModule,
+    FileModule,
+    AboutModule,
   ],
   controllers: [AppController],
   providers: [

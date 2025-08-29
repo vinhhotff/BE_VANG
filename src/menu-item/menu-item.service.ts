@@ -1,5 +1,9 @@
 // menu-item.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { MenuItem, MenuItemDocument } from './schemas/menu-item.schema';
@@ -10,10 +14,13 @@ import { IUser } from '../user/user.interface';
 @Injectable()
 export class MenuItemService {
   constructor(
-    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>,
-  ) { }
+    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>
+  ) {}
 
-  async create(createMenuItemDto: CreateMenuItemDto, user: IUser): Promise<MenuItemDocument> {
+  async create(
+    createMenuItemDto: CreateMenuItemDto,
+    user: IUser
+  ): Promise<MenuItemDocument> {
     const menuItem = new this.menuItemModel({
       ...createMenuItemDto,
       createdBy: user._id,
@@ -31,18 +38,79 @@ export class MenuItemService {
     }
     return foundMenuItem;
   }
-
-  async findAll(category?: string, isAvailable?: boolean): Promise<MenuItemDocument[]> {
-    const filter: any = {};
-    if (category) filter.category = category;
-    if (isAvailable !== undefined) filter.isAvailable = isAvailable;
-
+  async findAll(): Promise<MenuItemDocument[]> {
     return await this.menuItemModel
-      .find(filter)
+      .find()
       .populate('images')
       .populate('createdBy', 'name email')
-      .sort({ createdAt: -1 })
+      .populate('updatedBy', 'name email')
       .exec();
+  }
+  async findPaginate(currentPage: number, limit: number, qs: string = '') {
+    // Xử lý input
+    const page = Math.max(1, currentPage); // Đảm bảo page không âm
+    const defaultLimit = Math.max(1, Math.min(+limit || 10, 100)); // Giới hạn 1-100, mặc định 10
+
+    // Tính offset
+    const offset = (page - 1) * defaultLimit;
+
+    // Phân tích qs thành filter
+    const filter = this.parseQuery(qs);
+
+    // Tính tổng số mục
+    const totalItems = await this.menuItemModel.countDocuments(filter);
+
+    // Thực thi truy vấn
+    const result = await this.menuItemModel
+      .find(filter)
+      .skip(offset)
+      .limit(defaultLimit)
+      .exec();
+
+    const totalPages = Math.ceil(totalItems / defaultLimit);
+
+    return {
+      results: result,
+      meta: {
+        total: totalItems,
+        page,
+        limit: defaultLimit,
+        totalPages,
+      },
+    };
+  }
+
+  // Hàm phân tích qs chỉ cho bộ lọc
+  private parseQuery(qs: string) {
+    const filter: any = {};
+
+    if (qs) {
+      // Tách điều kiện theo dấu ,
+      const conditions = qs.split(',').map((part) => part.trim().split('='));
+
+      conditions.forEach(([key, value]) => {
+        if (key && value) {
+          const decodedValue = decodeURIComponent(value);
+
+          // ✅ 1. Xử lý boolean
+          if (key === 'isVegan' || key === 'isVegetarian') {
+            filter[key] = decodedValue === 'true';
+          }
+
+          // ✅ 3. Xử lý tìm kiếm text (regex, ignoreCase)
+          else if (key === 'search') {
+            filter['name'] = { $regex: decodedValue, $options: 'i' };
+          }
+
+          // ✅ 4. Các field khác (ví dụ category, allergens, v.v…)
+          else {
+            filter[key] = { $regex: decodedValue, $options: 'i' };
+          }
+        }
+      });
+    }
+
+    return filter;
   }
 
   async findById(id: string): Promise<MenuItemDocument> {
@@ -71,7 +139,7 @@ export class MenuItemService {
     id: string,
     updateMenuItemDto: UpdateMenuItemDto,
     user: IUser,
-    files?: Express.Multer.File[], // nhận thêm files
+    files?: Express.Multer.File[] // nhận thêm files
   ): Promise<MenuItemDocument> {
     const updateData: any = {
       ...updateMenuItemDto,
@@ -96,14 +164,12 @@ export class MenuItemService {
     return updatedMenuItem;
   }
 
-
-  async updateAvailability(id: string, isAvailable: boolean): Promise<MenuItemDocument> {
+  async updateAvailability(
+    id: string,
+    isAvailable: boolean
+  ): Promise<MenuItemDocument> {
     const menuItem = await this.menuItemModel
-      .findByIdAndUpdate(
-        id,
-        { isAvailable },
-        { new: true }
-      )
+      .findByIdAndUpdate(id, { isAvailable }, { new: true })
       .populate('images')
       .exec();
 
@@ -126,7 +192,11 @@ export class MenuItemService {
     return { categories: categories.sort() };
   }
   // Thêm image (filename) vào menu item
-  async addImages(id: string, filenames: string[], user: IUser): Promise<MenuItemDocument> {
+  async addImages(
+    id: string,
+    filenames: string[],
+    user: IUser
+  ): Promise<MenuItemDocument> {
     const menuItem = await this.findById(id);
     const existingImages = menuItem.images ?? [];
     const updatedImages = [...existingImages, ...filenames];
@@ -135,11 +205,16 @@ export class MenuItemService {
   }
 
   // Xóa image (filename) khỏi menu item
-  async removeImage(id: string, filename: string, user: IUser): Promise<MenuItemDocument> {
+  async removeImage(
+    id: string,
+    filename: string,
+    user: IUser
+  ): Promise<MenuItemDocument> {
     const menuItem = await this.findById(id);
-    const updatedImages = (menuItem.images ?? []).filter(img => img !== filename);
+    const updatedImages = (menuItem.images ?? []).filter(
+      (img) => img !== filename
+    );
 
     return await this.update(id, { images: updatedImages }, user);
   }
-
 }
