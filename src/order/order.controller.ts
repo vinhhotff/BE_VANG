@@ -1,7 +1,16 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
-import { Permission } from '../auth/decoration/setMetadata';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
+import { Permission, Public } from '../auth/decoration/setMetadata';
 import { OrderService } from './order.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, CreateOnlineOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
 import { MarkOrderPaidDto } from './dto/update-order.dto';
 import { OrderStatus } from './schemas/order.schema';
@@ -16,6 +25,12 @@ export class OrderController {
     return this.orderService.create(createOrderDto);
   }
 
+  @Post('online')
+  @Public()
+  createOnlineOrder(@Body() createOnlineOrderDto: CreateOnlineOrderDto) {
+    return this.orderService.createOnlineOrder(createOnlineOrderDto);
+  }
+
   @Permission('order:findAll')
   @Get()
   findAll(
@@ -23,7 +38,7 @@ export class OrderController {
     @Query('guest') guest?: string,
     @Query('user') user?: string,
     @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
+    @Query('limit') limit: number = 10
   ) {
     return this.orderService.findAll(status, guest, user, page, limit);
   }
@@ -43,18 +58,19 @@ export class OrderController {
   @Permission('order:updateStatus')
   @Patch(':id/status')
   updateStatus(
-    @Param('id') id: string, 
-    @Body() updateOrderStatusDto: UpdateOrderStatusDto,
+    @Param('id') id: string,
+    @Body() updateOrderStatusDto: UpdateOrderStatusDto
   ) {
-    const statusEnum = OrderStatus[updateOrderStatusDto.status as keyof typeof OrderStatus];
+    const statusEnum =
+      OrderStatus[updateOrderStatusDto.status as keyof typeof OrderStatus];
     return this.orderService.updateStatus(id, statusEnum);
   }
 
   @Permission('order:markAsPaid')
   @Patch(':id/paid')
   markAsPaid(
-    @Param('id') id: string, 
-    @Body() markOrderPaidDto: MarkOrderPaidDto,
+    @Param('id') id: string,
+    @Body() markOrderPaidDto: MarkOrderPaidDto
   ) {
     return this.orderService.markAsPaid(id, markOrderPaidDto);
   }
@@ -65,4 +81,3 @@ export class OrderController {
     return this.orderService.remove(id);
   }
 }
-

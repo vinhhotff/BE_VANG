@@ -8,6 +8,8 @@ import { Guest, GuestSchema } from '../guest/schemas/guest.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 
+import { DeliveryModule } from '../delivery/delivery.module';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -17,6 +19,7 @@ import { LoyaltyModule } from '../loyalty/loyalty.module';
       { name: User.name, schema: UserSchema },
     ]),
     LoyaltyModule, // Import LoyaltyModule để sử dụng LoyaltyService
+    DeliveryModule,
   ],
   controllers: [OrderController],
   providers: [OrderService],

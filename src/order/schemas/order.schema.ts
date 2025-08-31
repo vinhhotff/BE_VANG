@@ -3,6 +3,12 @@ import mongoose, { Types, Document } from 'mongoose';
 import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 export type OrderDocument = Order & Document;
 
+export enum OrderType {
+  DINE_IN = 'DINE_IN',
+  DELIVERY = 'DELIVERY',
+  PICKUP = 'PICKUP',
+}
+
 @Schema({ timestamps: true })
 export class Order extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Guest' })
@@ -17,7 +23,7 @@ export class Order extends Document {
         quantity: { type: Number, required: true, min: 1 },
         note: { type: String, default: '' },
         unitPrice: { type: Number, required: true, min: 0 },
-        subtotal: { type: Number, required: true, min: 0 }
+        subtotal: { type: Number, required: true, min: 0 },
       },
     ],
     required: true,
@@ -30,13 +36,13 @@ export class Order extends Document {
     subtotal: number;
   }[];
 
-  @Prop({ 
+  @Prop({
     type: String,
-    enum: ['pending', 'preparing', 'served', 'cancelled'], 
-    default: 'pending' 
+    enum: ['pending', 'preparing', 'served', 'cancelled'],
+    default: 'pending',
   })
   status: 'pending' | 'preparing' | 'served' | 'cancelled';
-  
+
   @Prop({ required: true, min: 0 })
   totalPrice: number; // Tổng tiền của order
 
@@ -49,8 +55,21 @@ export class Order extends Document {
   @Prop()
   estimatedReadyTime?: Date; // Thời gian dự kiến hoàn thành
 
-  @Prop({ type: Types.ObjectId, ref: 'Table' })
+  @Prop({ type: Types.ObjectId, ref: 'Table', required: false })
   table?: Types.ObjectId; // Bàn phục vụ
+
+  @Prop({
+    type: String,
+    enum: OrderType,
+    default: OrderType.DINE_IN,
+  })
+  orderType: OrderType;
+
+  @Prop({ required: false })
+  deliveryAddress?: string;
+
+  @Prop({ required: false })
+  customerPhone?: string;
 
   @Prop({ type: Object })
   createdBy?: {
@@ -93,6 +112,9 @@ export interface IOrder {
   specialInstructions?: string;
   estimatedReadyTime?: Date;
   table?: Types.ObjectId;
+  orderType: OrderType;
+  deliveryAddress?: string;
+  customerPhone?: string;
   createdAt: Date;
   updatedAt: Date;
 }

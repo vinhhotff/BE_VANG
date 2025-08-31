@@ -22,6 +22,8 @@ import { TableModule } from './table/table.module';
 import { FileModule } from './file/file.module';
 import { AboutModule } from './about/about.module';
 
+import { DeliveryModule } from './delivery/delivery.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -48,8 +50,8 @@ import { AboutModule } from './about/about.module';
     AnalyticsModule,
     TableModule,
     FileModule,
-    FileModule,
     AboutModule,
+    DeliveryModule,
   ],
   controllers: [AppController],
   providers: [

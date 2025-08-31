@@ -1,19 +1,26 @@
-import { 
-  Injectable, 
-  NotFoundException, 
+import {
+  Injectable,
+  NotFoundException,
   BadRequestException,
-  ForbiddenException 
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Order, OrderDocument, OrderStatus } from './schemas/order.schema';
-import { CreateOrderDto } from './dto/create-order.dto';
+import {
+  Order,
+  OrderDocument,
+  OrderStatus,
+  OrderType,
+} from './schemas/order.schema';
+import { CreateOrderDto, CreateOnlineOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
 import { MenuItem } from '../menu-item/schemas/menu-item.schema';
 import { Guest } from '../guest/schemas/guest.schema';
 import { User } from '../user/schemas/user.schema';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { MarkOrderPaidDto } from './dto/update-order.dto';
+
+import { DeliveryService } from '../delivery/delivery.service';
 
 @Injectable()
 export class OrderService {
@@ -23,6 +30,7 @@ export class OrderService {
     @InjectModel(Guest.name) private guestModel: Model<Guest>,
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly loyaltyService: LoyaltyService,
+    private readonly deliveryService: DeliveryService
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
@@ -30,7 +38,9 @@ export class OrderService {
 
     // Validate that only one of guest or user is provided
     if ((guest && user) || (!guest && !user)) {
-      throw new BadRequestException('Must provide either guest or user, not both or neither');
+      throw new BadRequestException(
+        'Must provide either guest or user, not both or neither'
+      );
     }
 
     // Validate guest or user exists
@@ -50,23 +60,36 @@ export class OrderService {
 
     // Validate menu items and calculate total price
     let totalPrice = 0;
-    const validatedItems: { item: string; quantity: number }[] = [];
+    const validatedItems: {
+      item: string;
+      quantity: number;
+      unitPrice: number;
+      subtotal: number;
+    }[] = [];
 
     for (const orderItem of items) {
       const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
       if (!menuItem) {
-        throw new NotFoundException(`Menu item with ID ${orderItem.item} not found`);
+        throw new NotFoundException(
+          `Menu item with ID ${orderItem.item} not found`
+        );
       }
       if (!menuItem.available) {
-        throw new BadRequestException(`Menu item '${menuItem.name}' is not available`);
+        throw new BadRequestException(
+          `Menu item '${menuItem.name}' is not available`
+        );
       }
 
+      const unitPrice = menuItem.price;
+      const subtotal = unitPrice * orderItem.quantity;
       validatedItems.push({
         item: orderItem.item,
         quantity: orderItem.quantity,
+        unitPrice,
+        subtotal,
       });
 
-      totalPrice += menuItem.price * orderItem.quantity;
+      totalPrice += subtotal;
     }
 
     const order = new this.orderModel({
@@ -80,11 +103,93 @@ export class OrderService {
 
     // Update guest's orders array
     if (guest) {
-      await this.guestModel.findByIdAndUpdate(
-        guest,
-        { $push: { orders: savedOrder._id } },
-        { new: true }
-      ).exec();
+      await this.guestModel
+        .findByIdAndUpdate(
+          guest,
+          { $push: { orders: savedOrder._id } },
+          { new: true }
+        )
+        .exec();
+    }
+
+    return savedOrder;
+  }
+
+  async createOnlineOrder(
+    createOnlineOrderDto: CreateOnlineOrderDto
+  ): Promise<Order> {
+    const {
+      items,
+      user,
+      customerName,
+      customerPhone,
+      orderType,
+      deliveryAddress,
+      specialInstructions,
+    } = createOnlineOrderDto;
+
+    if (orderType === OrderType.DELIVERY && !deliveryAddress) {
+      throw new BadRequestException(
+        'Delivery address is required for delivery orders'
+      );
+    }
+
+    // Validate menu items and calculate total price
+    let totalPrice = 0;
+    const validatedItems: {
+      item: string;
+      quantity: number;
+      unitPrice: number;
+      subtotal: number;
+    }[] = [];
+
+    for (const orderItem of items) {
+      const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
+      if (!menuItem) {
+        throw new NotFoundException(
+          `Menu item with ID ${orderItem.item} not found`
+        );
+      }
+      if (!menuItem.available) {
+        throw new BadRequestException(
+          `Menu item '${menuItem.name}' is not available`
+        );
+      }
+
+      const unitPrice = menuItem.price;
+      const subtotal = unitPrice * orderItem.quantity;
+      validatedItems.push({
+        item: orderItem.item,
+        quantity: orderItem.quantity,
+        unitPrice,
+        subtotal,
+      });
+
+      totalPrice += subtotal;
+    }
+
+    const orderData: any = {
+      items: validatedItems,
+      totalPrice,
+      status: OrderStatus.PENDING,
+      orderType,
+      specialInstructions,
+      customerPhone,
+      deliveryAddress:
+        orderType === OrderType.DELIVERY ? deliveryAddress : undefined,
+      user: user ? user : undefined,
+    };
+
+    const order = new this.orderModel(orderData);
+    const savedOrder = await order.save();
+
+    if (orderType === OrderType.DELIVERY) {
+      await this.deliveryService.create({
+        order: savedOrder._id,
+        customerName,
+        customerPhone,
+        address: deliveryAddress!,
+      });
     }
 
     return savedOrder;
@@ -95,7 +200,7 @@ export class OrderService {
     guest?: string,
     user?: string,
     page: number = 1,
-    limit: number = 10,
+    limit: number = 10
   ): Promise<{ orders: Order[]; total: number; totalPages: number }> {
     const filter: any = {};
     if (status) filter.status = status;
@@ -198,7 +303,10 @@ export class OrderService {
     return order;
   }
 
-  async update(id: string, updateOrderDto: UpdateOrderStatusDto): Promise<Order> {
+  async update(
+    id: string,
+    updateOrderDto: UpdateOrderStatusDto
+  ): Promise<Order> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid order ID format');
     }
@@ -209,8 +317,13 @@ export class OrderService {
     }
 
     // Don't allow updates if order is already served or cancelled
-    if (existingOrder.status === OrderStatus.SERVED || existingOrder.status === OrderStatus.CANCELLED) {
-      throw new ForbiddenException(`Cannot update order with status: ${existingOrder.status}`);
+    if (
+      existingOrder.status === OrderStatus.SERVED ||
+      existingOrder.status === OrderStatus.CANCELLED
+    ) {
+      throw new ForbiddenException(
+        `Cannot update order with status: ${existingOrder.status}`
+      );
     }
 
     const order = await this.orderModel
@@ -243,11 +356,13 @@ export class OrderService {
 
     // Remove order from guest's orders array
     if (order.guest) {
-      await this.guestModel.findByIdAndUpdate(
-        order.guest,
-        { $pull: { orders: id } },
-        { new: true }
-      ).exec();
+      await this.guestModel
+        .findByIdAndUpdate(
+          order.guest,
+          { $pull: { orders: id } },
+          { new: true }
+        )
+        .exec();
     }
 
     await this.orderModel.findByIdAndDelete(id).exec();
@@ -267,38 +382,44 @@ export class OrderService {
           _id: null,
           total: { $sum: 1 },
           pending: {
-            $sum: { $cond: [{ $eq: ['$status', OrderStatus.PENDING] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ['$status', OrderStatus.PENDING] }, 1, 0] },
           },
           preparing: {
-            $sum: { $cond: [{ $eq: ['$status', OrderStatus.PREPARING] }, 1, 0] }
+            $sum: {
+              $cond: [{ $eq: ['$status', OrderStatus.PREPARING] }, 1, 0],
+            },
           },
           served: {
-            $sum: { $cond: [{ $eq: ['$status', OrderStatus.SERVED] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ['$status', OrderStatus.SERVED] }, 1, 0] },
           },
           cancelled: {
-            $sum: { $cond: [{ $eq: ['$status', OrderStatus.CANCELLED] }, 1, 0] }
+            $sum: {
+              $cond: [{ $eq: ['$status', OrderStatus.CANCELLED] }, 1, 0],
+            },
           },
           totalRevenue: {
             $sum: {
               $cond: [
                 { $eq: ['$status', OrderStatus.SERVED] },
                 '$totalPrice',
-                0
-              ]
-            }
-          }
-        }
-      }
+                0,
+              ],
+            },
+          },
+        },
+      },
     ]);
 
-    return stats || {
-      total: 0,
-      pending: 0,
-      preparing: 0,
-      served: 0,
-      cancelled: 0,
-      totalRevenue: 0,
-    };
+    return (
+      stats || {
+        total: 0,
+        pending: 0,
+        preparing: 0,
+        served: 0,
+        cancelled: 0,
+        totalRevenue: 0,
+      }
+    );
   }
 
   async findOrdersInPeriod(start: Date, end: Date): Promise<Order[]> {
@@ -312,7 +433,10 @@ export class OrderService {
       .exec();
   }
 
-  async markAsPaid (id: string, markOrderPaidDto: MarkOrderPaidDto): Promise<Order> {
+  async markAsPaid(
+    id: string,
+    markOrderPaidDto: MarkOrderPaidDto
+  ): Promise<Order> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid order ID format');
     }
@@ -330,5 +454,4 @@ export class OrderService {
 
     return order;
   }
-
 }
