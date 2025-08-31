@@ -188,7 +188,7 @@ export class OrderService {
         order: savedOrder._id,
         customerName,
         customerPhone,
-        address: deliveryAddress!,
+        deliveryAddress: deliveryAddress!,
       });
     }
 

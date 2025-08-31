@@ -20,7 +20,7 @@ export class Delivery extends Document {
   customerPhone: string;
 
   @Prop({ required: true })
-  address: string;
+  deliveryAddress: string;
 
   @Prop({ type: String, enum: DeliveryStatus, default: DeliveryStatus.PENDING })
   status: DeliveryStatus;
