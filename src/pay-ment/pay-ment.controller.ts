@@ -6,14 +6,18 @@ import { UpdatePaymentDto } from './dto/update-pay-ment.dto';
 
 @Controller('payments')
 export class PaymentController {
-  constructor(private readonly paymentService: PaymentService) {}
+  constructor(private readonly paymentService: PaymentService) { }
 
   @Permission('payment:create')
   @Post()
   create(@Body() createPaymentDto: CreatePaymentDto) {
     return this.paymentService.create(createPaymentDto);
   }
-
+  @Get("revenue")
+  async getRevenue() {
+    const revenue = await this.paymentService.getTotalRevenue();
+    return { revenue };
+  }
   @Permission('payment:findAll')
   @Get()
   findAll() {
@@ -37,5 +41,8 @@ export class PaymentController {
   remove(@Param('id') id: string) {
     return this.paymentService.remove(id);
   }
+
+
+
 }
 

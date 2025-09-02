@@ -31,7 +31,7 @@ export class OrderService {
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly loyaltyService: LoyaltyService,
     private readonly deliveryService: DeliveryService
-  ) {}
+  ) { }
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
     const { items, guest, user } = createOrderDto;
@@ -193,6 +193,10 @@ export class OrderService {
     }
 
     return savedOrder;
+  }
+
+  async countOrders(): Promise<number> {
+    return this.orderModel.countDocuments();
   }
 
   async findAll(

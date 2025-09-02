@@ -25,7 +25,7 @@ export class UserService {
     @InjectModel(User.name) private userModel: SoftDeleteModel<UserDocument>, // 👈 CHÚ Ý
     private readonly JwtService: JwtService, // Thêm JwtService nếu cần
     private readonly configService: ConfigService // Thêm ConfigService nếu cần
-  ) {}
+  ) { }
 
   //hashPassword function to hash the password
   hashedSomething = async (something: string): Promise<string> => {
@@ -118,11 +118,14 @@ export class UserService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid ID format');
     }
-    const user = this.userModel.findById(id).populate({path:'role'}).exec();
+    const user = this.userModel.findById(id).populate({ path: 'role' }).exec();
     if (!user) {
       throw new BadRequestException('User not found');
     }
-    return user; 
+    return user;
+  }
+  async countUsers(): Promise<number> {
+    return this.userModel.countDocuments();
   }
 
   async update(id: string, updateUserDto: UpdateUserDto, user?: IUser) {
@@ -137,9 +140,9 @@ export class UserService {
         ...updateUserDto,
         updatedBy: user
           ? {
-              _id: user._id,
-              email: user.email,
-            }
+            _id: user._id,
+            email: user.email,
+          }
           : undefined,
       };
       const updated = await this.userModel

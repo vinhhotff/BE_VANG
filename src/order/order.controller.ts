@@ -17,7 +17,7 @@ import { OrderStatus } from './schemas/order.schema';
 
 @Controller('orders')
 export class OrderController {
-  constructor(private readonly orderService: OrderService) {}
+  constructor(private readonly orderService: OrderService) { }
 
   @Permission('order:create')
   @Post()
@@ -30,7 +30,11 @@ export class OrderController {
   createOnlineOrder(@Body() createOnlineOrderDto: CreateOnlineOrderDto) {
     return this.orderService.createOnlineOrder(createOnlineOrderDto);
   }
-
+  @Get('count')
+  async countOrders() {
+    const total = await this.orderService.countOrders();
+    return { total };
+  }
   @Permission('order:findAll')
   @Get()
   findAll(
@@ -80,4 +84,5 @@ export class OrderController {
   remove(@Param('id') id: string) {
     return this.orderService.remove(id);
   }
+
 }

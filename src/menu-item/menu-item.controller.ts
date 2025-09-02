@@ -13,6 +13,7 @@ import {
   Req,
   UseGuards,
   BadRequestException,
+  Headers,
 } from '@nestjs/common';
 import {
   CustomMessage,
@@ -31,7 +32,7 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 @Controller('menu-items')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class MenuItemController {
-  constructor(private readonly menuItemService: MenuItemService) {}
+  constructor(private readonly menuItemService: MenuItemService) { }
 
   @Permission('menuItem:create')
   @Post()
@@ -39,15 +40,23 @@ export class MenuItemController {
   async create(
     @UploadedFiles(ParseFilesPipe) files: Express.Multer.File[],
     @Body() createMenuItemDto: CreateMenuItemDto,
-    @Req() req: { user: IUser }
+    @Req() req: { user: IUser },
   ) {
     const imageNames = files.map((f) => f.filename);
 
     // truyền xuống service để lưu DB
     return this.menuItemService.create(
       { ...createMenuItemDto, images: imageNames },
-      req.user
+      req.user,
+      files,
     );
+  }
+  @Public()
+  @CustomMessage('Get total number of MenuItems')
+  @Get("count")
+  async getMenuItemCount() {
+    const total = await this.menuItemService.countMenuItems();
+    return { total };
   }
 
   @Public()
@@ -126,10 +135,9 @@ export class MenuItemController {
     if (!files || files.length === 0) {
       throw new BadRequestException('File(s) are required');
     }
-    const filenames = files.map((file) => file.filename);
-    return this.menuItemService.addImages(id, filenames, req.user);
+    // No need for filenames here; pass files directly
+    return this.menuItemService.addImages(id, files, req.user);
   }
-
   // Xóa một ảnh khỏi MenuItem
   @Permission('menuItem:update')
   @Delete(':id/images/:filename')

@@ -36,7 +36,7 @@ export class MenuItem {
   preparationTime?: number; // minutes
 
   @Prop({ type: [String], default: [] })
-  allergens?: string[]; // allergen information
+  tag?: string[]; // allergen information
 
   @Prop({ default: false })
   isVegetarian?: boolean;
@@ -77,7 +77,7 @@ export interface IMenuItem {
   available: boolean;
   category: string;
   preparationTime?: number;
-  allergens?: string[];
+  tag?: string[];
   isVegetarian?: boolean;
   isVegan?: boolean;
   createdAt: Date;

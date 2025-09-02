@@ -1,16 +1,17 @@
 import {
   Controller,
   Post,
-  Body,
   Param,
   Delete,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
-  UploadedFiles,
   ParseFilePipeBuilder,
+  BadRequestException,
+  Headers,
 } from '@nestjs/common';
 import { FileService } from './file.service';
 import { FileInterceptor } from '@nestjs/platform-express/multer/interceptors/file.interceptor';
@@ -26,14 +27,18 @@ export class FileController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
           new FileTypeValidator({ fileType: /\.(png|jpe?g|gif|bmp|webp)$/ }),
         ],
-      })
+      }),
     )
-    file: Express.Multer.File
+    file: Express.Multer.File,
+    @Headers('bucket') bucket: string, // ✅ lấy từ header
   ) {
-    return this.fileService.uploadFile(file);
+    if (!bucket) {
+      throw new BadRequestException('Bucket name is required');
+    }
+    return this.fileService.uploadFile(file, bucket);
   }
 
   @Post('uploads')
@@ -41,17 +46,27 @@ export class FileController {
   async uploadMultipleFiles(
     @UploadedFiles(
       new ParseFilePipeBuilder()
-        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 }) // 5MB
         .addFileTypeValidator({ fileType: /\.(png|jpe?g|gif|bmp|webp)$/ })
-        .build({ fileIsRequired: true })
+        .build({ fileIsRequired: true }),
     )
-    files: Express.Multer.File[]
+    files: Express.Multer.File[],
+    @Headers('bucket') bucket: string, // ✅ cũng lấy từ header cho thống nhất
   ) {
-    return this.fileService.uploadFiles(files);
+    if (!bucket) {
+      throw new BadRequestException('Bucket name is required');
+    }
+    return this.fileService.uploadFiles(files, bucket);
   }
 
   @Delete(':path')
-  async remove(@Param('path') path: string) {
-    return this.fileService.remove(path);
+  async remove(
+    @Param('path') path: string,
+    @Headers('bucket') bucket: string, // ✅ lấy từ header thay vì body
+  ) {
+    if (!bucket) {
+      throw new BadRequestException('Bucket name is required');
+    }
+    return this.fileService.remove(path, bucket);
   }
 }

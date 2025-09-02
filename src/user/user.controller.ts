@@ -17,10 +17,11 @@ import {
   CustomMessage,
   User,
   Permission,
+  Public,
 } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ParseFilesPipe  } from 'src/file/upload.validator';
+import { ParseFilesPipe } from 'src/file/upload.validator';
 
 
 // import { User } from '../decorate/setMetadata';
@@ -54,6 +55,12 @@ export class UserController {
   findOne(@Param('id') id: string) {
     return this.userService.findOneID(id);
   }
+  @Public()
+  @Get("count")
+  async getUserCount() {
+    const total = await this.userService.countUsers();
+    return { total };
+  }
 
   @Permission('user:update')
   @CustomMessage('Update user by ID')
@@ -77,7 +84,7 @@ export class UserController {
   @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(
     @Param('id') id: string,
-    @UploadedFile(ParseFilesPipe ) file: Express.Multer.File,
+    @UploadedFile(ParseFilesPipe) file: Express.Multer.File,
   ) {
     return this.userService.update(id, { avatar: file.filename }, undefined);
   }

@@ -14,5 +14,6 @@ import { SupabaseModule } from 'src/config/supabase.module';
     }),
     SupabaseModule,
   ],
+  exports: [FileService]
 })
 export class FileModule {}

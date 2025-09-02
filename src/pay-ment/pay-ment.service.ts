@@ -47,6 +47,13 @@ export class PaymentService {
   async findAll(): Promise<Payment[]> {
     return this.paymentModel.find().populate('orders').exec();
   }
+async getTotalRevenue(): Promise<number> {
+  const result = await this.paymentModel.aggregate([
+    { $group: { _id: null, total: { $sum: "$amount" } } }
+  ]);
+
+  return result[0]?.total || 0;
+}
 
   async findById(id: string): Promise<Payment> {
     if (!Types.ObjectId.isValid(id)) {

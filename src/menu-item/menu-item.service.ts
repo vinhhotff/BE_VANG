@@ -10,19 +10,31 @@ import { MenuItem, MenuItemDocument } from './schemas/menu-item.schema';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { IUser } from '../user/user.interface';
+import { FileService } from 'src/file/file.service';
 
 @Injectable()
 export class MenuItemService {
+  private readonly bucketName = 'MenuItemImages'
+
   constructor(
-    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>
-  ) {}
+    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>,
+    private readonly fileService: FileService,
+  ) { }
 
   async create(
     createMenuItemDto: CreateMenuItemDto,
-    user: IUser
+    user: IUser,
+    files: Express.Multer.File[],
   ): Promise<MenuItemDocument> {
+    const imageUrls: string[] = [];
+    if (files && files.length > 0) {
+      const uploadResults = await this.fileService.uploadFiles(files, this.bucketName);
+      imageUrls.push(...uploadResults.map(result => result.url));
+    }
+
     const menuItem = new this.menuItemModel({
       ...createMenuItemDto,
+      images: imageUrls,
       createdBy: user._id,
       updatedBy: user._id,
     });
@@ -38,6 +50,7 @@ export class MenuItemService {
     }
     return foundMenuItem;
   }
+
   async findAll(): Promise<MenuItemDocument[]> {
     return await this.menuItemModel
       .find()
@@ -102,7 +115,7 @@ export class MenuItemService {
             filter['name'] = { $regex: decodedValue, $options: 'i' };
           }
 
-          // ✅ 4. Các field khác (ví dụ category, allergens, v.v…)
+          // ✅ 4. Các field khác (ví dụ category, tag, v.v…)
           else {
             filter[key] = { $regex: decodedValue, $options: 'i' };
           }
@@ -111,6 +124,9 @@ export class MenuItemService {
     }
 
     return filter;
+  }
+  async countMenuItems(): Promise<number> {
+    return this.menuItemModel.countDocuments();
   }
 
   async findById(id: string): Promise<MenuItemDocument> {
@@ -129,7 +145,7 @@ export class MenuItemService {
 
   async findByCategory(category: string): Promise<MenuItemDocument[]> {
     return await this.menuItemModel
-      .find({ category, isAvailable: true })
+      .find({ category, available: true })
       .populate('images')
       .sort({ createdAt: -1 })
       .exec();
@@ -146,11 +162,9 @@ export class MenuItemService {
       updatedBy: user._id,
     };
 
-    // Nếu có upload ảnh mới thì lưu và thay thế images
     if (files && files.length > 0) {
-      // Ở đây tuỳ bạn: hoặc chỉ lưu filename, hoặc lưu sang collection File rồi lấy ObjectId
-      const imageIds = files.map((file) => file.filename);
-      updateData.images = imageIds;
+      const uploadResults = await this.fileService.uploadFiles(files, this.bucketName);
+      updateData.images = uploadResults.map(result => result.url);
     }
 
     const updatedMenuItem = await this.menuItemModel
@@ -166,10 +180,10 @@ export class MenuItemService {
 
   async updateAvailability(
     id: string,
-    isAvailable: boolean
+    available: boolean
   ): Promise<MenuItemDocument> {
     const menuItem = await this.menuItemModel
-      .findByIdAndUpdate(id, { isAvailable }, { new: true })
+      .findByIdAndUpdate(id, { available }, { new: true })
       .populate('images')
       .exec();
 
@@ -194,12 +208,16 @@ export class MenuItemService {
   // Thêm image (filename) vào menu item
   async addImages(
     id: string,
-    filenames: string[],
+    files: Express.Multer.File[],
     user: IUser
   ): Promise<MenuItemDocument> {
     const menuItem = await this.findById(id);
     const existingImages = menuItem.images ?? [];
-    const updatedImages = [...existingImages, ...filenames];
+
+    const uploadResults = await this.fileService.uploadFiles(files, this.bucketName);
+    const newImageUrls = uploadResults.map(result => result.url);
+
+    const updatedImages = [...existingImages, ...newImageUrls];
 
     return await this.update(id, { images: updatedImages }, user);
   }
@@ -207,13 +225,20 @@ export class MenuItemService {
   // Xóa image (filename) khỏi menu item
   async removeImage(
     id: string,
-    filename: string,
+    imageUrl: string,
     user: IUser
   ): Promise<MenuItemDocument> {
     const menuItem = await this.findById(id);
     const updatedImages = (menuItem.images ?? []).filter(
-      (img) => img !== filename
+      (img) => img !== imageUrl
     );
+
+    // Optional: Delete from Supabase storage
+    const filename = imageUrl.split('/').pop();
+    if (filename) {
+      await this.fileService.remove(filename, this.bucketName);
+    }
+
 
     return await this.update(id, { images: updatedImages }, user);
   }

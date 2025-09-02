@@ -47,7 +47,7 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  allergens?: string[];
+  tag?: string[];
 
   @IsOptional()
   @Transform(({ value }) => {
