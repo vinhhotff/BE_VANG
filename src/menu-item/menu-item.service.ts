@@ -11,6 +11,7 @@ import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { IUser } from '../user/user.interface';
 import { FileService } from 'src/file/file.service';
+import { SupabaseConfig } from 'src/config/supabase.config';
 
 @Injectable()
 export class MenuItemService {
@@ -19,6 +20,7 @@ export class MenuItemService {
   constructor(
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>,
     private readonly fileService: FileService,
+    private supabaseConfig: SupabaseConfig,
   ) { }
 
   async create(
@@ -194,10 +196,22 @@ export class MenuItemService {
   }
 
   async remove(id: string): Promise<{ message: string }> {
-    const result = await this.menuItemModel.findByIdAndDelete(id);
-    if (!result) {
-      throw new NotFoundException('Menu item not found');
+    const menuItem = await this.menuItemModel.findById(id);
+    if (!menuItem) throw new NotFoundException('Menu item not found');
+
+    // Xóa tất cả file trên Supabase (nếu có)
+    if (menuItem.images?.length) {
+      const supabase = this.supabaseConfig.getClient();
+      for (const url of menuItem.images) {
+        const fileName = (url as string).split('/').pop(); // url phải là string
+        if (fileName) {
+          await supabase.storage.from('bucketName').remove([fileName]);
+        }
+      }
     }
+
+    // Xóa record trong MongoDB
+    await this.menuItemModel.findByIdAndDelete(id);
     return { message: 'Menu item deleted successfully' };
   }
 

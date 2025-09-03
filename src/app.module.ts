@@ -31,9 +31,17 @@ import { DeliveryModule } from './delivery/delivery.module';
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGODB_URI'),
-      }),
+      useFactory: async (configService: ConfigService) => {
+        let uri = configService.get<string>('MONGODB_URI');
+        if (uri && uri.includes('localhost')) {
+          uri = uri.replace('localhost', '127.0.0.1');
+        }
+        return {
+          uri,
+          serverSelectionTimeoutMS: 30000, // Tăng timeout để cho Atlas có thời gian "thức dậy"
+          connectTimeoutMS: 10000, // Timeout cho kết nối ban đầu
+        };
+      },
       inject: [ConfigService],
     }),
     UserModule,

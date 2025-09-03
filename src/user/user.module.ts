@@ -7,7 +7,6 @@ import { User, UserSchema } from './schemas/user.schema';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 // 👇 Nếu có import AuthModule
-import { AuthModule } from 'src/auth/auth.module';
 import { FileModule } from 'src/file/file.module';
 
 @Module({
@@ -16,7 +15,7 @@ import { FileModule } from 'src/file/file.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secretOrPrivateKey: configService.get<string>(
+        secret: configService.get<string>(
           'JWT_SECRET_TOKEN_SECRET'
         ),
         signOptions: {
@@ -26,11 +25,10 @@ import { FileModule } from 'src/file/file.module';
       }),
       inject: [ConfigService],
     }),
-    forwardRef(() => AuthModule), // ✅ Chỉ thêm nếu có vòng lặp
-    FileModule,
+    FileModule, // ✅ Không import AuthModule nữa
   ],
   controllers: [UserController],
   providers: [UserService],
-  exports: [UserService],
+  exports: [UserService,MongooseModule],
 })
 export class UserModule {}

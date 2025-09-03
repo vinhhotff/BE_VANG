@@ -9,12 +9,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './passport/jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { RoleModule } from 'src/role/role.module';
-import { MongooseModule } from '@nestjs/mongoose/dist/mongoose.module';
-import { User, UserSchema } from 'src/user/schemas/user.schema';
+
 
 @Module({
   imports: [
-    forwardRef(() => UserModule), // ✅ Sửa chỗ này
+    forwardRef(() => UserModule),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -27,10 +26,11 @@ import { User, UserSchema } from 'src/user/schemas/user.schema';
       }),
       inject: [ConfigService],
     }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]), // <-- thêm dòng này
     RoleModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy],
 })
 export class AuthModule {}
+
+

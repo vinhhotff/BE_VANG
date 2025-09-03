@@ -56,7 +56,6 @@ export class AuthService {
       expiresIn: this.configService.get<string>('JWT_EXPIRATION_TIME'),
       secret: this.configService.get<string>('JWT_SECRET_TOKEN_SECRET'),
     });
-
     const refreshToken = await this.jwtService.sign(payload, {
       expiresIn: this.configService.get<string>(
         'JWT_EXPIRATION_REFRESHTOKEN_TIME'
@@ -82,7 +81,7 @@ export class AuthService {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
-    const findNameRole= await this.roleService.findById(user.role);
+    const findNameRole= await this.roleService.findById(user.role.toString());
     return {
       accessToken,
       user: {
@@ -107,34 +106,51 @@ export class AuthService {
     return register;
   }
 
-  refreshToken = async (refreshToken: string, res: Response) => {
-    if (!refreshToken) {
-      throw new BadRequestException('Refresh token not found');
-    }
-    const user = await this.userService.findUserByAccessToken(refreshToken);
-    if (!user) {
-      throw new BadRequestException('Invalid refresh token');
-    }
-    const payload = {
-      _id: user._id,
-      email: user.email,
-      username: user.name,
-      role: user.role,
-    };
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_EXPIRATION_TIME'),
-      secret: this.configService.get<string>('JWT_SECRET_TOKEN_SECRET'),
-    });
-    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
-    
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
-    return { accessToken, user };
+ refreshToken = async (refreshToken: string, res: Response) => {
+  if (!refreshToken) {
+    throw new BadRequestException('Refresh token not found');
+  }
+
+  const user = await this.userService.findUserByAccessToken(refreshToken);
+  if (!user) {
+    throw new BadRequestException('Invalid refresh token');
+  }
+
+  // Lấy role từ RoleService
+    const findNameRole= await this.roleService.findById(user.role.toString());
+
+  const payload = {
+    _id: user._id,
+    email: user.email,
+    username: user.name,
+    role: findNameRole.name, // ✅ dùng tên thay vì ObjectId
   };
+
+  const accessToken = this.jwtService.sign(payload, {
+    expiresIn: this.configService.get<string>('JWT_EXPIRATION_TIME'),
+    secret: this.configService.get<string>('JWT_SECRET_TOKEN_SECRET'),
+  });
+
+  const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    maxAge: 15 * 60 * 1000, // 15 minutes
+  });
+
+  return {
+    accessToken,
+    user: {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: findNameRole.name, // ✅ luôn trả tên
+    },
+  };
+};
+
 
   async logout(res: Response) {
   const refreshToken = res.req.cookies['refreshToken'];
