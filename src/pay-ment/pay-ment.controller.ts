@@ -1,12 +1,12 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
 import { Permission } from '../auth/decoration/setMetadata';
-import { PaymentService } from './pay-ment.service';
+import { PayMentService } from './pay-ment.service';
 import { CreatePaymentDto } from './dto/create-pay-ment.dto';
 import { UpdatePaymentDto } from './dto/update-pay-ment.dto';
 
 @Controller('payments')
 export class PaymentController {
-  constructor(private readonly paymentService: PaymentService) { }
+  constructor(private readonly paymentService: PayMentService) { }
 
   @Permission('payment:create')
   @Post()

@@ -1,5 +1,5 @@
-import { IsBoolean, IsEnum, IsOptional, IsString } from "class-validator";
-import { OrderType } from "../schemas/order.schema";
+import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
+import { OrderType } from '../schemas/order.schema';
 
 export class UpdateOrderStatusDto {
   @IsEnum(['pending', 'preparing', 'served', 'cancelled'])
@@ -11,19 +11,19 @@ export class MarkOrderPaidDto {
 }
 
 export class UpdateOrderDto {
-    @IsEnum(OrderType)
-    @IsOptional()
-    orderType?: OrderType;
+  @IsEnum(OrderType)
+  @IsOptional()
+  orderType?: OrderType;
 
-    @IsString()
-    @IsOptional()
-    deliveryAddress?: string;
+  @IsString()
+  @IsOptional()
+  deliveryAddress?: string;
 
-    @IsString()
-    @IsOptional()
-    customerPhone?: string;
+  @IsString()
+  @IsOptional()
+  customerPhone?: string;
 
-    @IsEnum(['pending', 'preparing', 'served', 'cancelled'])
-    @IsOptional()
-    status?: string;
+  @IsEnum(['pending', 'preparing', 'served', 'cancelled'])
+  @IsOptional()
+  status?: string;
 }

@@ -4,10 +4,10 @@ import { Model } from 'mongoose';
 import { OrderService } from '../order/order.service';
 import { MenuItemService } from '../menu-item/menu-item.service';
 import { UserService } from '../user/user.service';
-import { PaymentService } from '../payment/payment.service';
+import { PayMentService } from '../pay-ment/pay-ment.service';
 import { Order, OrderDocument } from '../order/schemas/order.schema';
 import { User, UserDocument } from '../user/schemas/user.schema';
-import { Payment, PaymentDocument } from '../payment/schemas/payment.schema';
+import { Payment, PaymentDocument } from '../pay-ment/schemas/pay-ment.schema';
 import { OrderStatus } from '../order/schemas/order.schema';
 import {
   startOfDay,
@@ -29,7 +29,7 @@ export class AnalyticsService {
     private readonly orderService: OrderService,
     private readonly menuItemService: MenuItemService,
     private readonly userService: UserService,
-    private readonly paymentService: PaymentService,
+    private readonly paymentService: PayMentService,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>

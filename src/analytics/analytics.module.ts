@@ -5,8 +5,8 @@ import { AnalyticsController } from './analytics.controller';
 import { OrderModule } from '../order/order.module';
 import { MenuItemModule } from '../menu-item/menu-item.module';
 import { UserModule } from '../user/user.module';
-import { PaymentModule } from '../payment/payment.module';
-import { Payment, PaymentSchema } from '../payment/schemas/payment.schema';
+import { PayMentModule } from '../pay-ment/pay-ment.module';
+import { Payment, PaymentSchema } from '../pay-ment/schemas/pay-ment.schema';
 import { Order, OrderSchema } from '../order/schemas/order.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
 
@@ -15,7 +15,7 @@ import { User, UserSchema } from '../user/schemas/user.schema';
     OrderModule,
     MenuItemModule,
     UserModule,
-    PaymentModule,
+    PayMentModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: User.name, schema: UserSchema },

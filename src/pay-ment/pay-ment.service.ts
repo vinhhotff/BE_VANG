@@ -11,7 +11,7 @@ import { UpdatePaymentDto } from './dto/update-pay-ment.dto';
 import { Order, OrderDocument } from '../order/schemas/order.schema';
 
 @Injectable()
-export class PaymentService {
+export class PayMentService {
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>
