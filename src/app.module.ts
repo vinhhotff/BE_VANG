@@ -14,6 +14,7 @@ import { GuestModule } from './guest/guest.module';
 import { MenuItemModule } from './menu-item/menu-item.module';
 import { OrderModule } from './order/order.module';
 import { PayMentModule } from './pay-ment/pay-ment.module';
+import { PaymentModule } from './payment/payment.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { ReservationModule } from './reservation/reservation.module';
 import { QROrderModule } from './qr-order/qr-order.module';
@@ -23,6 +24,7 @@ import { FileModule } from './file/file.module';
 import { AboutModule } from './about/about.module';
 
 import { DeliveryModule } from './delivery/delivery.module';
+import { VoucherModule } from './voucher/voucher.module';
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { DeliveryModule } from './delivery/delivery.module';
     MenuItemModule,
     OrderModule,
     PayMentModule,
+    PaymentModule,
     LoyaltyModule,
     ReservationModule,
     QROrderModule,
@@ -60,6 +63,7 @@ import { DeliveryModule } from './delivery/delivery.module';
     FileModule,
     AboutModule,
     DeliveryModule,
+    VoucherModule,
   ],
   controllers: [AppController],
   providers: [

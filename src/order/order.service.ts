@@ -276,7 +276,21 @@ export class OrderService {
       throw new BadRequestException('Invalid order ID format');
     }
 
+    // Debug logging
+    console.log('🔍 Backend received status update:', {
+      orderId: id,
+      receivedStatus: status,
+      statusType: typeof status,
+      validStatuses: Object.values(OrderStatus),
+      isStatusValid: Object.values(OrderStatus).includes(status)
+    });
+
     if (!Object.values(OrderStatus).includes(status)) {
+      console.error('❌ Status validation failed:', {
+        received: status,
+        expected: Object.values(OrderStatus),
+        comparison: Object.values(OrderStatus).map(s => ({ value: s, matches: s === status }))
+      });
       throw new BadRequestException('Invalid order status');
     }
 

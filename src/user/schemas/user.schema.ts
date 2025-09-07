@@ -15,7 +15,11 @@ export class User extends mongoose.Document {
   @Prop({ required: true })
   password: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Role', default: '6891b5da7f6c9b1ab0424aa0' })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Role',
+    default: '6891b5da7f6c9b1ab0424aa0',
+  })
   role: Types.ObjectId;
 
   @Prop({ default: true })

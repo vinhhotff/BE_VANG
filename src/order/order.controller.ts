@@ -65,9 +65,23 @@ export class OrderController {
     @Param('id') id: string,
     @Body() updateOrderStatusDto: UpdateOrderStatusDto
   ) {
-    const statusEnum =
-      OrderStatus[updateOrderStatusDto.status as keyof typeof OrderStatus];
-    return this.orderService.updateStatus(id, statusEnum);
+    // Log để debug
+    console.log('🔍 Updating order status:', {
+      id,
+      status: updateOrderStatusDto.status,
+      type: typeof updateOrderStatusDto.status,
+    });
+    const normalizedStatus = updateOrderStatusDto.status.trim().toLowerCase();
+
+    // Đảm bảo status được gửi đúng format
+    const statusToUpdate = normalizedStatus as
+      | 'pending'
+      | 'preparing'
+      | 'served'
+      | 'cancelled';
+    console.log('📤 Sending status to service:', statusToUpdate);
+
+    return this.orderService.updateStatus(id, statusToUpdate as OrderStatus);
   }
 
   @Permission('order:markAsPaid')
