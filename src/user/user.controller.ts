@@ -9,6 +9,8 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -23,13 +25,10 @@ import { IUser } from './user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ParseFilesPipe } from 'src/file/upload.validator';
 
-
 // import { User } from '../decorate/setMetadata';
 @Controller('user')
 export class UserController {
-  constructor(
-    private readonly userService: UserService,
-  ) { }
+  constructor(private readonly userService: UserService) {}
 
   @CustomMessage('Create new user')
   @Permission('user:create')
@@ -42,11 +41,13 @@ export class UserController {
   @CustomMessage('Fetch List user with Paginate')
   @Get()
   async findAll(
-    @Query('page') currentPage: string = '1', // Default to page 1
-    @Query('limit') limit: string = '10', // Default to 10 items per page
-    @Query('qs') qs: string = '' // Default to empty query string
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) currentPage: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('qs') qs: string = ''
   ) {
-    return this.userService.findAll(+currentPage, +limit, qs);
+    const result = await this.userService.findAll(currentPage, limit, qs);
+
+    return result;
   }
 
   @Permission('user:findOne')
@@ -56,7 +57,7 @@ export class UserController {
     return this.userService.findOneID(id);
   }
   @Public()
-  @Get("count")
+  @Get('count')
   async getUserCount() {
     const total = await this.userService.countUsers();
     return { total };
@@ -84,9 +85,8 @@ export class UserController {
   @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(
     @Param('id') id: string,
-    @UploadedFile(ParseFilesPipe) file: Express.Multer.File,
+    @UploadedFile(ParseFilesPipe) file: Express.Multer.File
   ) {
     return this.userService.update(id, { avatar: file.filename }, undefined);
   }
-
 }

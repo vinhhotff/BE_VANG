@@ -15,23 +15,26 @@ import { SupabaseConfig } from 'src/config/supabase.config';
 
 @Injectable()
 export class MenuItemService {
-  private readonly bucketName = 'MenuItemImages'
+  private readonly bucketName = 'MenuItemImages';
 
   constructor(
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>,
     private readonly fileService: FileService,
-    private supabaseConfig: SupabaseConfig,
-  ) { }
+    private supabaseConfig: SupabaseConfig
+  ) {}
 
   async create(
     createMenuItemDto: CreateMenuItemDto,
     user: IUser,
-    files: Express.Multer.File[],
+    files: Express.Multer.File[]
   ): Promise<MenuItemDocument> {
     const imageUrls: string[] = [];
     if (files && files.length > 0) {
-      const uploadResults = await this.fileService.uploadFiles(files, this.bucketName);
-      imageUrls.push(...uploadResults.map(result => result.url));
+      const uploadResults = await this.fileService.uploadFiles(
+        files,
+        this.bucketName
+      );
+      imageUrls.push(...uploadResults.map((result) => result.url));
     }
 
     const menuItem = new this.menuItemModel({
@@ -165,8 +168,11 @@ export class MenuItemService {
     };
 
     if (files && files.length > 0) {
-      const uploadResults = await this.fileService.uploadFiles(files, this.bucketName);
-      updateData.images = uploadResults.map(result => result.url);
+      const uploadResults = await this.fileService.uploadFiles(
+        files,
+        this.bucketName
+      );
+      updateData.images = uploadResults.map((result) => result.url);
     }
 
     const updatedMenuItem = await this.menuItemModel
@@ -228,8 +234,11 @@ export class MenuItemService {
     const menuItem = await this.findById(id);
     const existingImages = menuItem.images ?? [];
 
-    const uploadResults = await this.fileService.uploadFiles(files, this.bucketName);
-    const newImageUrls = uploadResults.map(result => result.url);
+    const uploadResults = await this.fileService.uploadFiles(
+      files,
+      this.bucketName
+    );
+    const newImageUrls = uploadResults.map((result) => result.url);
 
     const updatedImages = [...existingImages, ...newImageUrls];
 
@@ -252,7 +261,6 @@ export class MenuItemService {
     if (filename) {
       await this.fileService.remove(filename, this.bucketName);
     }
-
 
     return await this.update(id, { images: updatedImages }, user);
   }
