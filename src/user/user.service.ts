@@ -1,24 +1,39 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 /**
- * User Service - Đã cập nhật hỗ trợ query string filtering
+ * User Service - Hỗ trợ query string filtering và sorting
  *
- * Query string format: ?qs=key=value,key2=value2
+ * API Endpoint: GET /api/v1/user
  *
- * Các key hỗ trợ:
- * - search: Tìm kiếm trong name hoặc email (?qs=search=vinh)
- * - name: Tìm kiếm theo tên (?qs=name=vinh)
- * - email: Tìm kiếm theo email (?qs=email=vinh@example.com)
- * - role: Tìm kiếm theo tên role (?qs=role=admin)
- * - phone: Tìm kiếm theo số điện thoại (?qs=phone=123456)
+ * Query Parameters:
+ * - page: Số trang (mặc định: 1)
+ * - limit: Số item trên 1 trang (mặc định: 10)
+ * - qs: Query string filtering (format: key=value,key2=value2)
+ * - sortBy: Trường để sắp xếp (mặc định: createdAt)
+ * - sortOrder: Thứ tự sắp xếp asc/desc (mặc định: desc)
  *
- * Ví dụ: http://localhost:8083/api/v1/user?page=1&limit=3&qs=name=vinh
- *         http://localhost:8083/api/v1/user?page=1&limit=10&qs=search=admin,role=admin
+ * Các key hỗ trợ trong qs:
+ * - search: Tìm kiếm tổng hợp trong name và email
+ * - name: Tìm kiếm theo tên cụ thể
+ * - email: Tìm kiếm theo email cụ thể
+ * - role: Tìm kiếm theo tên role (không phải ID)
+ * - phone: Tìm kiếm theo số điện thoại
  *
- * Role được populate với tên và permissions, password/refreshToken được loại bỏ khỏi response.
+ * Ví dụ sử dụng:
+ * - http://localhost:8083/api/v1/user?page=1&limit=10&qs=role=admin&sortBy=name&sortOrder=desc
+ * - http://localhost:8083/api/v1/user?page=1&limit=5&qs=search=vinh,role=admin
+ * - http://localhost:8083/api/v1/user?page=2&limit=20&sortBy=createdAt&sortOrder=asc
+ * - http://localhost:8083/api/v1/user?qs=name=john,email=john@example.com
+ *
+ * Response:
+ * - Role được populate với tên và permissions
+ * - Password và refreshToken được loại bỏ khỏi response
+ * - Trả về role.name thay vì role ObjectId
  */
 import { JwtService } from '@nestjs/jwt';
 import { compare, genSaltSync, hash } from 'bcrypt';
@@ -35,8 +50,7 @@ import { User, UserDocument } from './schemas/user.schema';
 import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import mongoose, { Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
-import { Role } from 'src/role/schemas/role.schema';
-import path from 'path';
+import { PaginationResult, SearchUserDto } from './dto/user.dto';
 @Injectable()
 export class UserService {
   constructor(
@@ -83,7 +97,7 @@ export class UserService {
         .findById(newUser._id)
         .populate({
           path: 'role',
-          select: 'name permissions', // Chỉ lấy tên và quyền của role
+          select: 'name', // Chỉ lấy tên của role
         })
         .select('-password -refreshToken') // Loại bỏ các trường nhạy cảm
         .exec();
@@ -92,76 +106,303 @@ export class UserService {
     }
   }
 
-  async findAll(currentPage: number, limit: number, qs: string = '') {
-    const page = Math.max(1, currentPage);
-    const defaultLimit = Math.max(1, Math.min(+limit || 10, 100));
-    const skip = (page - 1) * defaultLimit;
+  async searchUsers(query: SearchUserDto): Promise<PaginationResult<User>> {
+    const {
+      page = 1,
+      limit = 10,
+      qs,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query;
 
-    const filters = new URLSearchParams(qs);
-    const query: any = {};
-    const sort: any = { createdAt: -1 }; // mặc định mới nhất
+    console.log('🔍 SearchUsers called with query:', query);
 
-    // 🔎 Search theo name/email
-    if (filters.has('search')) {
-      const search = filters.get('search');
-      query.$or = [
-        { name: new RegExp(search, 'i') },
-        { email: new RegExp(search, 'i') },
-      ];
+    // Tạo MongoDB filter object và xử lý sort parameters
+    let filter: any = {};
+    let finalSortBy = sortBy;
+    let finalSortOrder = sortOrder;
+
+    // Xử lý điều kiện search từ qs parameter
+    if (qs && qs.trim()) {
+      console.log('🔍 Processing query string:', qs);
+      const searchConditions = this.parseQueryString(qs);
+
+      // Tách sort parameters khỏi search conditions
+      if (searchConditions.sortBy) {
+        finalSortBy = searchConditions.sortBy;
+        delete searchConditions.sortBy;
+        console.log('🔍 Override sortBy from qs:', finalSortBy);
+      }
+
+      if (searchConditions.sortOrder) {
+        finalSortOrder = searchConditions.sortOrder as 'asc' | 'desc';
+        delete searchConditions.sortOrder;
+        console.log('🔍 Override sortOrder from qs:', finalSortOrder);
+      }
+
+      filter = await this.buildMongoFilter(searchConditions);
     }
 
-    // 🔎 Lọc theo role name → convert sang roleId
-    if (filters.has('role')) {
-      const roleName = filters.get('role');
-      const role = await this.roleModel.findOne({ name: roleName }).exec();
-      if (role) {
-        query.role = role._id;
-      } else {
-        query.role = null; // đảm bảo không trả kết quả nếu role không tồn tại
+    console.log('🔍 Final filter applied:', filter);
+
+    // Tạo sort object cho MongoDB
+    const sort: any = {};
+    if (finalSortBy) {
+      sort[finalSortBy] = finalSortOrder === 'asc' ? 1 : -1;
+      console.log('🔍 Sort applied:', sort);
+    }
+
+    // Đếm tổng số documents với filter
+    const total = await this.userModel.countDocuments(filter);
+    console.log('🔍 Total documents found with filter:', total);
+
+    // Tính toán pagination - Đảm bảo page và limit không undefined
+    const safePage = page || 1;
+    const safeLimit = limit || 10;
+    const skip = (safePage - 1) * safeLimit;
+
+    // Thực hiện query với pagination và sorting
+    const data = await this.userModel
+      .find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(safeLimit)
+      .populate({
+        path: 'role',
+        select: 'name', // Chỉ lấy tên của role
+      })
+      .select('-password -refreshToken') // Loại bỏ password và refreshToken
+      .exec();
+
+    console.log(`✅ Found ${data.length} users on page ${safePage}`);
+    console.log('🔍 First user sample:', {
+      name: data[0]?.name,
+      email: data[0]?.email,
+      role: data[0]?.role,
+    });
+
+    // Tính toán pagination info
+    const totalPages = Math.ceil(total / safeLimit);
+    const hasNext = safePage < totalPages;
+    const hasPrev = safePage > 1;
+
+    return {
+      data,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages,
+      hasNext,
+      hasPrev,
+    };
+  }
+
+  private parseQueryString(qs: string): Record<string, string> {
+    const conditions: Record<string, string> = {};
+
+    console.log('🔍 Parsing query string:', qs);
+    console.log('🔍 Decoded query string:', decodeURIComponent(qs));
+
+    // Auto-detect delimiter: & (URL encoded) or , (comma separated)
+    const decodedQs = decodeURIComponent(qs);
+    let pairs: string[];
+
+    if (decodedQs.includes('&')) {
+      // URL encoded format: "role=staff&sortBy=name&sortOrder=desc"
+      pairs = decodedQs.split('&').map((pair) => pair.trim());
+      console.log('🔍 Detected URL encoded format (&)');
+    } else {
+      // Comma separated format: "role=admin,name=vinh,email=test@example.com"
+      pairs = decodedQs.split(',').map((pair) => pair.trim());
+      console.log('🔍 Detected comma separated format (,)');
+    }
+
+    console.log('🔍 Split pairs:', pairs);
+
+    for (const pair of pairs) {
+      const [key, value] = pair.split('=');
+      if (key && value) {
+        const cleanKey = key.trim();
+        const cleanValue = value.trim();
+        conditions[cleanKey] = cleanValue;
+        console.log(`✅ Parsed condition: ${cleanKey} = ${cleanValue}`);
       }
     }
 
-    // 🔎 Các filter khác (ví dụ phone, status, ...)
-    if (filters.has('phone')) {
-      query.phone = new RegExp(filters.get('phone'), 'i');
-    }
-    if (filters.has('status')) {
-      query.status = filters.get('status');
+    console.log('🔍 Final parsed conditions:', conditions);
+    return conditions;
+  }
+
+  private async buildMongoFilter(
+    conditions: Record<string, string>
+  ): Promise<any> {
+    const filter: any = {};
+
+    // Danh sách field được phép search (bao gồm sort parameters)
+    const validFields = [
+      'role',
+      'status',
+      'name',
+      'email',
+      'phone',
+      'search',
+      'sortBy',
+      'sortOrder',
+    ];
+
+    console.log('🔍 Building MongoDB filter for conditions:', conditions);
+
+    for (const [key, value] of Object.entries(conditions)) {
+      if (validFields.includes(key)) {
+        if (key === 'sortBy' || key === 'sortOrder') {
+          // Bỏ qua sort parameters - đã được xử lý ở searchUsers
+          console.log(`ℹ️ Skipping sort parameter: ${key}`);
+        } else if (key === 'role') {
+          // Tìm role theo tên thay vì ObjectId
+          console.log(`🔍 Searching for role with name: ${value}`);
+
+          const roleModel = this.userModel.db.model('Role');
+
+          // Debug: Kiểm tra tất cả roles trong DB
+          const allRoles = await roleModel.find({}).select('_id name').exec();
+          console.log('🔍 All roles in DB:', allRoles);
+
+          const matchingRoles = await roleModel
+            .find({
+              name: { $regex: value, $options: 'i' },
+            })
+            .select('_id name');
+
+          console.log(
+            '🔍 Found matching roles for "' + value + '":',
+            matchingRoles
+          );
+
+          if (matchingRoles.length > 0) {
+            // Handle both ObjectId and string types for role field
+            const roleIds = matchingRoles.map((role) => role._id);
+            const roleStrings = matchingRoles.map((role) =>
+              role._id.toString()
+            );
+
+            filter.role = {
+              $in: [...roleIds, ...roleStrings],
+            };
+
+            console.log(
+              '✅ Role filter applied with both ObjectId and string:',
+              filter.role
+            );
+          } else {
+            // Nếu không tìm thấy role, đặt điều kiện không thể match
+            filter.role = null;
+            console.log(
+              '❌ No matching roles found, setting role filter to null'
+            );
+          }
+        } else if (key === 'search') {
+          // Tìm kiếm tổng hợp trong name và email
+          filter.$or = [
+            { name: { $regex: value, $options: 'i' } },
+            { email: { $regex: value, $options: 'i' } },
+          ];
+          console.log('✅ Search filter applied:', filter.$or);
+        } else if (key === 'name' || key === 'email' || key === 'phone') {
+          // Text fields sử dụng regex để partial search (case-insensitive)
+          filter[key] = { $regex: value, $options: 'i' };
+          console.log(`✅ ${key} filter applied:`, filter[key]);
+        } else {
+          // Exact match cho các field khác
+          filter[key] = value;
+          console.log(`✅ ${key} exact match filter applied:`, value);
+        }
+      } else {
+        console.log(`⚠️ Skipping invalid field: ${key}`);
+      }
     }
 
-    // 🔎 Sort
-    if (filters.has('sortBy')) {
-      const sortBy = filters.get('sortBy');
-      const sortOrder = filters.get('sortOrder') === 'desc' ? -1 : 1;
-      sort[sortBy] = sortOrder;
+    console.log('🔍 Final MongoDB filter:', filter);
+    return filter;
+  }
+
+  // Method để search by role name thay vì ID (DEPRECATED - Sử dụng searchUsers instead)
+  async searchUsersByRoleName(
+    query: SearchUserDto
+  ): Promise<PaginationResult<User>> {
+    const { page = 1, limit = 10, qs, sortBy, sortOrder } = query;
+
+    const aggregationPipeline: any[] = [];
+
+    // Nếu có search conditions
+    if (qs) {
+      const searchConditions = this.parseQueryString(qs);
+
+      // Lookup role để có thể search by role name
+      aggregationPipeline.push({
+        $lookup: {
+          from: 'roles', // collection name của roles
+          localField: 'role',
+          foreignField: '_id',
+          as: 'roleDetails',
+        },
+      });
+
+      // Match stage
+      const matchConditions: any = {};
+
+      Object.entries(searchConditions).forEach(([key, value]) => {
+        if (key === 'role') {
+          // Search by role name thay vì ID
+          matchConditions['roleDetails.name'] = {
+            $regex: value,
+            $options: 'i',
+          };
+        } else if (key === 'name' || key === 'email') {
+          matchConditions[key] = { $regex: value, $options: 'i' };
+        } else if (['status', 'phone'].includes(key)) {
+          matchConditions[key] = value;
+        }
+      });
+
+      if (Object.keys(matchConditions).length > 0) {
+        aggregationPipeline.push({ $match: matchConditions });
+      }
     }
 
-    // 📊 Query song song
-    const [results, total] = await Promise.all([
-      this.userModel
-        .find(query)
-        .populate({
-          path: 'role',
-          select: 'name permissions', // lấy đúng name + permissions
-        })
-        .select('-password -refreshToken') // loại bỏ field nhạy cảm
-        .sort(sort)
-        .skip(skip)
-        .limit(defaultLimit)
-        .exec(),
-      this.userModel.countDocuments(query),
-    ]);
+    // Add sorting
+    if (sortBy) {
+      const sortObj: any = {};
+      sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
+      aggregationPipeline.push({ $sort: sortObj });
+    }
 
-    const totalPages = Math.ceil(total / defaultLimit);
+    // Count total for pagination
+    const countPipeline = [...aggregationPipeline, { $count: 'total' }];
+    const countResult = await this.userModel.aggregate(countPipeline);
+    const total = countResult[0]?.total || 0;
+
+    // Add pagination - Đảm bảo page và limit không undefined
+    const safePage = page || 1;
+    const safeLimit = limit || 10;
+    const skip = (safePage - 1) * safeLimit;
+    aggregationPipeline.push({ $skip: skip }, { $limit: safeLimit });
+
+    // Execute aggregation
+    const data = await this.userModel.aggregate(aggregationPipeline);
+
+    // Tính toán pagination info
+    const totalPages = Math.ceil(total / safeLimit);
+    const hasNext = safePage < totalPages;
+    const hasPrev = safePage > 1;
 
     return {
-      results,
-      meta: {
-        total,
-        page,
-        limit: defaultLimit,
-        totalPages,
-      },
+      data,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages,
+      hasNext,
+      hasPrev,
     };
   }
 
@@ -174,7 +415,7 @@ export class UserService {
       .findById(id)
       .populate({
         path: 'role',
-        select: 'name permissions', // Chỉ lấy tên và quyền của role
+        select: 'name', // Chỉ lấy tên của role
       })
       .select('-password -refreshToken') // Loại bỏ các trường nhạy cảm
       .exec();
@@ -210,7 +451,7 @@ export class UserService {
         .findByIdAndUpdate(id, updatedUser, { new: true })
         .populate({
           path: 'role',
-          select: 'name permissions', // Chỉ lấy tên và quyền của role
+          select: 'name', // Chỉ lấy tên của role
         })
         .select('-password -refreshToken') // Loại bỏ các trường nhạy cảm
         .exec();

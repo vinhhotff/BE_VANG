@@ -9,8 +9,7 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
-  DefaultValuePipe,
-  ParseIntPipe,
+  ValidationPipe,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -24,6 +23,7 @@ import {
 import { IUser } from './user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ParseFilesPipe } from 'src/file/upload.validator';
+import { PaginationResult, SearchUserDto } from './dto/user.dto';
 
 // import { User } from '../decorate/setMetadata';
 @Controller('user')
@@ -40,12 +40,28 @@ export class UserController {
   @Permission('user:findAll')
   @CustomMessage('Fetch List user with Paginate')
   @Get()
-  async findAll(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) currentPage: number,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Query('qs') qs: string = ''
-  ) {
-    const result = await this.userService.findAll(currentPage, limit, qs);
+  async getUsers(
+    @Query(new ValidationPipe({ transform: true })) query: SearchUserDto
+  ): Promise<PaginationResult<any>> {
+    console.log('🔍 User Controller - Raw query received:', query);
+    console.log('🔍 User Controller - Query string (qs):', query.qs);
+    if (query.qs) {
+      console.log(
+        '🔍 User Controller - Decoded qs:',
+        decodeURIComponent(query.qs)
+      );
+    }
+
+    const result = await this.userService.searchUsers(query);
+
+    console.log('✅ User Controller - Result summary:', {
+      totalUsers: result.total,
+      page: result.page,
+      limit: result.limit,
+      usersReturned: result.data.length,
+      firstUserRole: result.data[0]?.role,
+      firstUserHasPassword: !!result.data[0]?.password,
+    });
 
     return result;
   }

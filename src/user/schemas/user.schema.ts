@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import mongoose, { HydratedDocument, Types } from 'mongoose';
 import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
+import { Role } from 'src/role/schemas/role.schema';
 export type UserDocument = HydratedDocument<User>;
 
 @Schema({ timestamps: true })
@@ -20,7 +21,7 @@ export class User extends mongoose.Document {
     ref: 'Role',
     default: '6891b5da7f6c9b1ab0424aa0',
   })
-  role: Types.ObjectId;
+  role: Role | Types.ObjectId;
 
   @Prop({ default: true })
   isMember: boolean;

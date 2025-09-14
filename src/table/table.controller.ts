@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { TableService } from './table.service';
 import { Permission } from '../auth/decoration/setMetadata';
 import { CreateTableDto } from './dto/create-table.dto';
@@ -8,7 +17,7 @@ import { IUser } from 'src/user/user.interface';
 
 @Controller('tables')
 export class TableController {
-  constructor(private readonly tableService: TableService) { }
+  constructor(private readonly tableService: TableService) {}
 
   @Permission('table:create')
   @Post()
@@ -70,8 +79,7 @@ export class TableController {
 
   @Permission('table:remove')
   @Delete(':id')
-  remove(@Param('id') id: string,@User() user: IUser) {
-    return this.tableService.remove(id,user);
+  remove(@Param('id') id: string, @User() user: IUser) {
+    return this.tableService.remove(id, user);
   }
 }
-
