@@ -19,8 +19,12 @@ import { Guest } from '../guest/schemas/guest.schema';
 import { User } from '../user/schemas/user.schema';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { MarkOrderPaidDto } from './dto/update-order.dto';
-
 import { DeliveryService } from '../delivery/delivery.service';
+import { 
+  PaginationResponseDto, 
+  buildSortObject, 
+  buildSearchFilter 
+} from '../common/dto/pagination.dto';
 
 @Injectable()
 export class OrderService {
@@ -200,32 +204,56 @@ export class OrderService {
   }
 
   async findAll(
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
     status?: OrderStatus,
     guest?: string,
     user?: string,
-    page: number = 1,
-    limit: number = 10
-  ): Promise<{ orders: Order[]; total: number; totalPages: number }> {
-    const filter: any = {};
+    sortBy: string = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc'
+  ): Promise<PaginationResponseDto<Order>> {
+    // Build filter object
+    let filter: any = {};
+    
+    // Handle search parameter
+    if (search && search.trim()) {
+      // Search in guest table code or customer info
+      const searchFilter = {
+        $or: [
+          { customerName: { $regex: search, $options: 'i' } },
+          { customerPhone: { $regex: search, $options: 'i' } },
+        ]
+      };
+      filter = { ...filter, ...searchFilter };
+    }
+    
     if (status) filter.status = status;
     if (guest) filter.guest = guest;
     if (user) filter.user = user;
 
+    console.log('🔍 Order findAll - Filter applied:', filter);
+
+    // Create sort object
+    const sort = buildSortObject(sortBy, sortOrder);
+    console.log('🔍 Order findAll - Sort applied:', sort);
+
     const skip = (page - 1) * limit;
     const total = await this.orderModel.countDocuments(filter);
-    const totalPages = Math.ceil(total / limit);
 
     const orders = await this.orderModel
       .find(filter)
       .populate('items.item', 'name price category images')
       .populate('guest', 'tableCode')
       .populate('user', 'name email')
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(limit)
       .exec();
 
-    return { orders, total, totalPages };
+    console.log(`✅ Order findAll - Found ${orders.length} orders on page ${page}`);
+
+    return new PaginationResponseDto(orders, total, page, limit);
   }
 
   async findById(id: string): Promise<Order> {

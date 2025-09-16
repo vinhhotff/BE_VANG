@@ -14,6 +14,9 @@ import { CreateOrderDto, CreateOnlineOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
 import { MarkOrderPaidDto } from './dto/update-order.dto';
 import { OrderStatus } from './schemas/order.schema';
+import { OrderQueryDto } from './dto/order-query.dto';
+import { PaginationResponseDto } from '../common/dto/pagination.dto';
+import { ValidationPipe } from '@nestjs/common';
 
 @Controller('orders')
 export class OrderController {
@@ -38,13 +41,19 @@ export class OrderController {
   @Permission('order:findAll')
   @Get()
   findAll(
-    @Query('status') status?: OrderStatus,
-    @Query('guest') guest?: string,
-    @Query('user') user?: string,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10
-  ) {
-    return this.orderService.findAll(status, guest, user, page, limit);
+    @Query(new ValidationPipe({ transform: true })) query: OrderQueryDto
+  ): Promise<PaginationResponseDto<any>> {
+    
+    return this.orderService.findAll(
+      query.page,
+      query.limit,
+      query.search,
+      query.status,
+      query.guest,
+      query.user,
+      query.sortBy,
+      query.sortOrder
+    );
   }
 
   @Permission('order:findOne')
@@ -65,12 +74,7 @@ export class OrderController {
     @Param('id') id: string,
     @Body() updateOrderStatusDto: UpdateOrderStatusDto
   ) {
-    // Log để debug
-    console.log('🔍 Updating order status:', {
-      id,
-      status: updateOrderStatusDto.status,
-      type: typeof updateOrderStatusDto.status,
-    });
+   
     const normalizedStatus = updateOrderStatusDto.status.trim().toLowerCase();
 
     // Đảm bảo status được gửi đúng format
@@ -79,7 +83,6 @@ export class OrderController {
       | 'preparing'
       | 'served'
       | 'cancelled';
-    console.log('📤 Sending status to service:', statusToUpdate);
 
     return this.orderService.updateStatus(id, statusToUpdate as OrderStatus);
   }

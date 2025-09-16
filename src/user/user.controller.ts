@@ -24,6 +24,7 @@ import { IUser } from './user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ParseFilesPipe } from 'src/file/upload.validator';
 import { PaginationResult, SearchUserDto } from './dto/user.dto';
+import { PaginationResponseDto } from '../common/dto/pagination.dto';
 
 // import { User } from '../decorate/setMetadata';
 @Controller('user')
@@ -42,25 +43,29 @@ export class UserController {
   @Get()
   async getUsers(
     @Query(new ValidationPipe({ transform: true })) query: SearchUserDto
-  ): Promise<PaginationResult<any>> {
-    console.log('🔍 User Controller - Raw query received:', query);
-    console.log('🔍 User Controller - Query string (qs):', query.qs);
-    if (query.qs) {
-      console.log(
-        '🔍 User Controller - Decoded qs:',
-        decodeURIComponent(query.qs)
-      );
+  ): Promise<PaginationResponseDto<any>> {
+    console.log('🔍 User Controller - Standardized query received:', query);
+    
+    // Handle backward compatibility with old qs parameter
+    if (query.qs && !query.search) {
+      console.log('🔍 Converting legacy qs parameter to search:', query.qs);
+      // Parse legacy qs format: "name:search,email:search" -> "search"
+      const qsParts = query.qs.split(',');
+      const searchPart = qsParts.find(part => part.includes('search='));
+      if (searchPart) {
+        query.search = searchPart.split('=')[1];
+      }
     }
 
     const result = await this.userService.searchUsers(query);
 
-    console.log('✅ User Controller - Result summary:', {
-      totalUsers: result.total,
-      page: result.page,
-      limit: result.limit,
+    console.log('✅ User Controller - Standardized result:', {
+      totalUsers: result.meta.total,
+      page: result.meta.page,
+      limit: result.meta.limit,
+      totalPages: result.meta.totalPages,
       usersReturned: result.data.length,
       firstUserRole: result.data[0]?.role,
-      firstUserHasPassword: !!result.data[0]?.password,
     });
 
     return result;

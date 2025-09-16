@@ -130,8 +130,6 @@ export class MenuItemController {
     @UploadedFiles(ParseFilesPipe) files: Express.Multer.File[],
     @Req() req: { user: IUser }
   ) {
-    console.log('FILES RECEIVED:', files);
-
     if (!files || files.length === 0) {
       throw new BadRequestException('File(s) are required');
     }

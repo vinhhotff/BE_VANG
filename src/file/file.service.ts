@@ -12,7 +12,6 @@ export class FileService {
 
     const supabase = this.supabaseConfig.getClient();
     const fileName = `${Date.now()}-${file.originalname}`;
-    console.log(`Uploading ${file.originalname} to bucket ${bucket}`); // Gỡ lỗi
 
     const { data, error } = await supabase.storage
       .from(bucket)
@@ -38,7 +37,6 @@ export class FileService {
       throw new BadRequestException('Failed to retrieve public URL');
     }
 
-    console.log('Uploaded file URL:', publicUrlData.publicUrl); // Gỡ lỗi
 
     return {
       name: file.originalname,

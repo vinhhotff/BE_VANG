@@ -51,6 +51,12 @@ import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import mongoose, { Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { PaginationResult, SearchUserDto } from './dto/user.dto';
+import { 
+  PaginationQueryDto, 
+  PaginationResponseDto, 
+  buildSortObject, 
+  buildSearchFilter 
+} from '../common/dto/pagination.dto';
 @Injectable()
 export class UserService {
   constructor(
@@ -106,67 +112,59 @@ export class UserService {
     }
   }
 
-  async searchUsers(query: SearchUserDto): Promise<PaginationResult<User>> {
+  // Chuẩn hóa search users theo format mới
+  async searchUsers(query: SearchUserDto): Promise<PaginationResponseDto<User>> {
     const {
       page = 1,
       limit = 10,
-      qs,
+      search,
       sortBy = 'createdAt',
       sortOrder = 'desc',
+      role,
+      status,
     } = query;
 
-    console.log('🔍 SearchUsers called with query:', query);
+    console.log('🔍 SearchUsers called with standardized query:', query);
 
-    // Tạo MongoDB filter object và xử lý sort parameters
+    // Build base filter
     let filter: any = {};
-    let finalSortBy = sortBy;
-    let finalSortOrder = sortOrder;
 
-    // Xử lý điều kiện search từ qs parameter
-    if (qs && qs.trim()) {
-      console.log('🔍 Processing query string:', qs);
-      const searchConditions = this.parseQueryString(qs);
+    // Xử lý search parameter
+    if (search && search.trim()) {
+      const searchFilter = buildSearchFilter(search, ['name', 'email']);
+      filter = { ...filter, ...searchFilter };
+    }
 
-      // Tách sort parameters khỏi search conditions
-      if (searchConditions.sortBy) {
-        finalSortBy = searchConditions.sortBy;
-        delete searchConditions.sortBy;
-        console.log('🔍 Override sortBy from qs:', finalSortBy);
-      }
+    // Xử lý role filter
+    if (role && role !== 'all') {
+      filter.role = role;
+    }
 
-      if (searchConditions.sortOrder) {
-        finalSortOrder = searchConditions.sortOrder as 'asc' | 'desc';
-        delete searchConditions.sortOrder;
-        console.log('🔍 Override sortOrder from qs:', finalSortOrder);
-      }
-
-      filter = await this.buildMongoFilter(searchConditions);
+    // Xử lý status filter (nếu có)
+    if (status && status !== 'all') {
+      // Implement status filter logic here if needed
+      // filter.status = status;
     }
 
     console.log('🔍 Final filter applied:', filter);
 
-    // Tạo sort object cho MongoDB
-    const sort: any = {};
-    if (finalSortBy) {
-      sort[finalSortBy] = finalSortOrder === 'asc' ? 1 : -1;
-      console.log('🔍 Sort applied:', sort);
-    }
+    // Tạo sort object
+    const sort = buildSortObject(sortBy, sortOrder);
+    console.log('🔍 Sort applied:', sort);
 
-    // Đếm tổng số documents với filter
+    // Đếm tổng số documents
     const total = await this.userModel.countDocuments(filter);
-    console.log('🔍 Total documents found with filter:', total);
+    console.log('🔍 Total documents found:', total);
 
-    // Tính toán pagination - Đảm bảo page và limit không undefined
-    const safePage = page || 1;
-    const safeLimit = limit || 10;
-    const skip = (safePage - 1) * safeLimit;
+    // Tính toán pagination
+    const skip = (page - 1) * limit;
 
-    // Thực hiện query với pagination và sorting
+    // Thực hiện query
     const data = await this.userModel
       .find(filter)
       .sort(sort)
       .skip(skip)
-      .limit(safeLimit)
+      .limit(limit)
       .populate({
         path: 'role',
         select: 'name', // Chỉ lấy tên của role
@@ -174,27 +172,25 @@ export class UserService {
       .select('-password -refreshToken') // Loại bỏ password và refreshToken
       .exec();
 
-    console.log(`✅ Found ${data.length} users on page ${safePage}`);
+    console.log(`✅ Found ${data.length} users on page ${page}`);
     console.log('🔍 First user sample:', {
       name: data[0]?.name,
       email: data[0]?.email,
       role: data[0]?.role,
     });
 
-    // Tính toán pagination info
-    const totalPages = Math.ceil(total / safeLimit);
-    const hasNext = safePage < totalPages;
-    const hasPrev = safePage > 1;
-
-    return {
-      data,
-      total,
-      page: safePage,
-      limit: safeLimit,
-      totalPages,
-      hasNext,
-      hasPrev,
-    };
+    // Trả về theo format chuẩn
+    const result = new PaginationResponseDto(data, total, page, limit);
+    
+    console.log('🚀 User Service - Returning standardized format:', {
+      hasData: !!result.data,
+      dataLength: result.data ? result.data.length : 0,
+      hasMeta: !!result.meta,
+      metaTotal: result.meta ? result.meta.total : 'no meta',
+      resultKeys: Object.keys(result)
+    });
+    
+    return result;
   }
 
   private parseQueryString(qs: string): Record<string, string> {

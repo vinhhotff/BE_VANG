@@ -15,8 +15,6 @@ export class ParseFilesPipe implements PipeTransform {
   transform(
     value: Express.Multer.File | Express.Multer.File[]
   ): Express.Multer.File[] {
-    console.log('FILES RECEIVED:', value);
-
     if (!value) {
       throw new BadRequestException('File(s) are required');
     }

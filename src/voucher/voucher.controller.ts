@@ -14,8 +14,11 @@ import { VoucherService } from './voucher.service';
 import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { ValidateVoucherDto } from './dto/validate-voucher.dto';
+import { ApplyVoucherDto } from './dto/apply-voucher.dto';
 import { Permission, Public } from '../auth/decoration/setMetadata';
 import { VoucherStatus } from './schemas/voucher.schema';
+import { VoucherQueryDto } from './dto/voucher-query.dto';
+import { PaginationResponseDto } from '../common/dto/pagination.dto';
 
 @Controller('vouchers')
 export class VoucherController {
@@ -34,16 +37,17 @@ export class VoucherController {
   @Permission('voucher:findAll')
   @Get()
   findAll(
-    @Query('page') page: string = '1',
-    @Query('limit') limit: string = '10',
-    @Query('status') status?: VoucherStatus,
-    @Query('search') search?: string
-  ) {
+    @Query(new ValidationPipe({ transform: true })) query: VoucherQueryDto
+  ): Promise<PaginationResponseDto<any>> {
+    console.log('🔍 Voucher Controller - Standardized query received:', query);
+
     return this.voucherService.findAll(
-      parseInt(page),
-      parseInt(limit),
-      status,
-      search
+      query.page,
+      query.limit,
+      query.search,
+      query.status,
+      query.sortBy,
+      query.sortOrder
     );
   }
 
@@ -90,16 +94,21 @@ export class VoucherController {
 
   @Public()
   @Post('validate')
-  validateVoucher(@Body(ValidationPipe) validateVoucherDto: ValidateVoucherDto) {
+  validateVoucher(
+    @Body(ValidationPipe) validateVoucherDto: ValidateVoucherDto
+  ) {
     return this.voucherService.validateVoucher(validateVoucherDto);
+  }
+
+  @Public()
+  @Post('apply')
+  applyVoucher(@Body(ValidationPipe) applyVoucherDto: ApplyVoucherDto) {
+    return this.voucherService.applyVoucher(applyVoucherDto);
   }
 
   @Permission('voucher:use')
   @Post('use/:code')
-  useVoucher(
-    @Param('code') code: string,
-    @Req() req?: any
-  ) {
+  useVoucher(@Param('code') code: string, @Req() req?: any) {
     const userId = req?.user?._id;
     return this.voucherService.useVoucher(code, userId);
   }

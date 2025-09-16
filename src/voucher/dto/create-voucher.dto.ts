@@ -1,5 +1,15 @@
-import { IsNotEmpty, IsString, IsNumber, IsOptional, IsEnum, IsDateString, IsArray, Min, Max } from 'class-validator';
-import { VoucherType } from '../schemas/voucher.schema';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+  IsArray,
+  Min,
+  Max,
+} from 'class-validator';
+import { VoucherType, VoucherStatus } from '../schemas/voucher.schema';
 
 export class CreateVoucherDto {
   @IsNotEmpty()
@@ -61,4 +71,11 @@ export class CreateVoucherDto {
   @IsArray()
   @IsString({ each: true })
   allowedCategories?: string[];
+  
+  @IsOptional()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsEnum(VoucherStatus)
+  status?: VoucherStatus;
 }

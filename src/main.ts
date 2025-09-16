@@ -26,7 +26,6 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'public'), {
     prefix: '/public', // đổi prefix cho rõ ràng
   });
-  console.log(join(__dirname, '..', 'public'));
 
   const configService = app.get(ConfigService);
   const port = configService.get<string>('PORT');

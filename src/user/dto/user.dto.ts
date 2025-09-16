@@ -1,30 +1,19 @@
-import { IsOptional, IsString, IsNumber, Min, IsIn } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
+import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
-export class SearchUserDto {
+export class SearchUserDto extends PaginationQueryDto {
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  page?: number = 1;
+  @IsString()
+  role?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  limit?: number = 10;
+  @IsString()
+  status?: string;
 
+  // Backward compatibility - deprecated, will be removed
   @IsOptional()
   @IsString()
   qs?: string;
-
-  @IsOptional()
-  @IsString()
-  sortBy?: string = 'createdAt';
-
-  @IsOptional()
-  @IsIn(['asc', 'desc'])
-  sortOrder?: 'asc' | 'desc' = 'desc';
 }
 
 export class PaginationResult<T> {

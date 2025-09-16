@@ -10,6 +10,12 @@ import { Voucher, VoucherDocument, VoucherStatus, VoucherType } from './schemas/
 import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { UpdateVoucherDto } from './dto/update-voucher.dto';
 import { ValidateVoucherDto } from './dto/validate-voucher.dto';
+import { ApplyVoucherDto, ApplyVoucherResponseDto } from './dto/apply-voucher.dto';
+import { 
+  PaginationResponseDto, 
+  buildSortObject, 
+  buildSearchFilter 
+} from '../common/dto/pagination.dto';
 
 @Injectable()
 export class VoucherService {
@@ -53,37 +59,46 @@ export class VoucherService {
   async findAll(
     page: number = 1,
     limit: number = 10,
+    search?: string,
     status?: VoucherStatus,
-    search?: string
-  ): Promise<{ vouchers: Voucher[]; total: number; page: number; totalPages: number }> {
-    const filter: any = {};
+    sortBy: string = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc'
+  ): Promise<PaginationResponseDto<Voucher>> {
+    // Build filter object
+    let filter: any = {};
     
+    // Handle search parameter
+    if (search && search.trim()) {
+      const searchFilter = buildSearchFilter(search, ['code', 'name', 'description']);
+      filter = { ...filter, ...searchFilter };
+    }
+    
+    // Handle status filter
     if (status) {
       filter.status = status;
     }
-    
-    if (search) {
-      filter.$or = [
-        { code: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
-    }
+
+    console.log('🔍 Voucher findAll - Filter applied:', filter);
+
+    // Create sort object
+    const sort = buildSortObject(sortBy, sortOrder);
+    console.log('🔍 Voucher findAll - Sort applied:', sort);
 
     const skip = (page - 1) * limit;
     const total = await this.voucherModel.countDocuments(filter);
-    const totalPages = Math.ceil(total / limit);
 
     const vouchers = await this.voucherModel
       .find(filter)
       .populate('createdBy', 'name email')
       .populate('updatedBy', 'name email')
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(limit)
       .exec();
 
-    return { vouchers, total, page, totalPages };
+    console.log(`✅ Voucher findAll - Found ${vouchers.length} vouchers on page ${page}`);
+
+    return new PaginationResponseDto(vouchers, total, page, limit);
   }
 
   async findById(id: string): Promise<Voucher> {
@@ -353,5 +368,37 @@ export class VoucherService {
     });
 
     return result;
+  }
+
+  async applyVoucher(applyVoucherDto: ApplyVoucherDto): Promise<ApplyVoucherResponseDto> {
+    const { code, orderTotal, userId } = applyVoucherDto;
+
+    // Validate the voucher first
+    const validation = await this.validateVoucher({
+      code,
+      orderValue: orderTotal,
+      userId,
+    });
+
+    if (!validation.valid) {
+      throw new BadRequestException(validation.message || 'Invalid voucher');
+    }
+
+    const { voucher, discount } = validation;
+    if (!voucher || discount === undefined) {
+      throw new BadRequestException('Failed to apply voucher');
+    }
+
+    // Ensure discount doesn't exceed order total
+    const actualDiscount = Math.min(discount, orderTotal);
+    const finalTotal = Math.max(0, orderTotal - actualDiscount);
+
+    return {
+      code: voucher.code,
+      discountAmount: actualDiscount,
+      finalTotal,
+      voucherId: (voucher as any)._id.toString(),
+      message: `Voucher applied successfully. You saved ${actualDiscount.toLocaleString()} VND!`,
+    };
   }
 }
