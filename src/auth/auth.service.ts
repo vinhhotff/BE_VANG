@@ -22,7 +22,7 @@ export class AuthService {
     private userService: UserService,
     private jwtService: JwtService,
     private readonly configService: ConfigService, // Thêm ConfigService nếu cần
-    private roleService : RoleService
+    private roleService: RoleService
   ) {}
 
   async validateUser(email: string, pass: string): Promise<any> {
@@ -49,7 +49,7 @@ export class AuthService {
       _id: user._id,
       email: user.email,
       username: user.name,
-      role:user.role
+      role: user.role,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -66,29 +66,30 @@ export class AuthService {
       await this.userService.hashedSomething(refreshToken);
     await this.userService.updateRefreshToken(user._id, hashedRefreshToken);
     // Set cả accessToken và refreshToken cookies
-    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
-    
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
+
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: isProduction, // Chỉ secure khi production
       sameSite: 'lax',
       maxAge: 15 * 60 * 1000, // 15 minutes
     });
-    
+
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: isProduction, // Chỉ secure khi production
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
-    const findNameRole= await this.roleService.findById(user.role.toString());
+    const findNameRole = await this.roleService.findById(user.role.toString());
     return {
       accessToken,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
-        role:findNameRole.name,
+        role: findNameRole.name,
       },
     };
   }
@@ -106,82 +107,82 @@ export class AuthService {
     return register;
   }
 
- refreshToken = async (refreshToken: string, res: Response) => {
-  if (!refreshToken) {
-    // Return 401 instead of 400 when no refresh token - this is expected for unauthenticated users
-    throw new UnauthorizedException('Refresh token not found');
-  }
+  refreshToken = async (refreshToken: string, res: Response) => {
+    if (!refreshToken) {
+      throw new BadRequestException('Refresh token not found');
+    }
 
-  const user = await this.userService.findUserByAccessToken(refreshToken);
-  if (!user) {
-    // Return 401 instead of 400 for invalid token
-    throw new UnauthorizedException('Invalid refresh token');
-  }
+    const user = await this.userService.findUserByAccessToken(refreshToken);
+    if (!user) {
+      throw new BadRequestException('Invalid refresh token');
+    }
 
-  // Lấy role từ RoleService
-    const findNameRole= await this.roleService.findById(user.role.toString());
+    // Lấy role từ RoleService
+    const findNameRole = await this.roleService.findById(user.role.toString());
 
-  const payload = {
-    _id: user._id,
-    email: user.email,
-    username: user.name,
-    role: findNameRole.name, // ✅ dùng tên thay vì ObjectId
-  };
-
-  const accessToken = this.jwtService.sign(payload, {
-    expiresIn: this.configService.get<string>('JWT_EXPIRATION_TIME'),
-    secret: this.configService.get<string>('JWT_SECRET_TOKEN_SECRET'),
-  });
-
-  const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
-
-  res.cookie('accessToken', accessToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    maxAge: 15 * 60 * 1000, // 15 minutes
-  });
-
-  return {
-    accessToken,
-    user: {
+    const payload = {
       _id: user._id,
-      name: user.name,
       email: user.email,
-      role: findNameRole.name, // ✅ luôn trả tên
-    },
-  };
-};
+      username: user.name,
+      role: findNameRole.name, // ✅ dùng tên thay vì ObjectId
+    };
 
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: this.configService.get<string>('JWT_EXPIRATION_TIME'),
+      secret: this.configService.get<string>('JWT_SECRET_TOKEN_SECRET'),
+    });
+
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
+
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    return {
+      accessToken,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: findNameRole.name, // ✅ luôn trả tên
+      },
+    };
+  };
 
   async logout(res: Response) {
-  const refreshToken = res.req.cookies['refreshToken'];
+    const refreshToken = res.req.cookies['refreshToken'];
 
-  // Ép kiểu trả về là IUser, nếu không thể sửa service thì dùng as IUser
-  const user = await this.userService.findUserByAccessToken(refreshToken)as unknown as IUser;
+    // Ép kiểu trả về là IUser, nếu không thể sửa service thì dùng as IUser
+    const user = (await this.userService.findUserByAccessToken(
+      refreshToken
+    )) as unknown as IUser;
 
-  if (!user || !user._id) {
-    return { message: 'User not found or already logged out' };
+    if (!user || !user._id) {
+      return { message: 'User not found or already logged out' };
+    }
+
+    // Ép kiểu ObjectId thành string
+    const userId = user._id.toString();
+
+    await this.userService.updateRefreshToken(userId, '');
+
+    // Xoá cookie ở client
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+
+    return { message: 'Logout successful' };
   }
-
-  // Ép kiểu ObjectId thành string
-  const userId = user._id.toString();
-
-  await this.userService.updateRefreshToken(userId, '');
-
-  // Xoá cookie ở client
-  res.clearCookie('refreshToken', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
-  });
-
-  res.clearCookie('accessToken', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
-  });
-
-  return { message: 'Logout successful' };
-}
 }
