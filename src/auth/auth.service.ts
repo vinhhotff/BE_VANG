@@ -108,12 +108,14 @@ export class AuthService {
 
  refreshToken = async (refreshToken: string, res: Response) => {
   if (!refreshToken) {
-    throw new BadRequestException('Refresh token not found');
+    // Return 401 instead of 400 when no refresh token - this is expected for unauthenticated users
+    throw new UnauthorizedException('Refresh token not found');
   }
 
   const user = await this.userService.findUserByAccessToken(refreshToken);
   if (!user) {
-    throw new BadRequestException('Invalid refresh token');
+    // Return 401 instead of 400 for invalid token
+    throw new UnauthorizedException('Invalid refresh token');
   }
 
   // Lấy role từ RoleService
