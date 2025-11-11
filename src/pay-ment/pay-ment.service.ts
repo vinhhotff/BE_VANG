@@ -5,17 +5,42 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { ConfigService } from '@nestjs/config';
+import { PayOS } from '@payos/node';
 import { Payment, PaymentDocument } from './schemas/pay-ment.schema';
 import { CreatePaymentDto } from './dto/create-pay-ment.dto';
 import { UpdatePaymentDto } from './dto/update-pay-ment.dto';
+import { CreatePayOSLinkDto } from './dto/create-payos-link.dto';
+import { ConfirmPayOSPaymentDto } from './dto/confirm-payos-payment.dto';
 import { Order, OrderDocument } from '../order/schemas/order.schema';
 
 @Injectable()
 export class PayMentService {
+  private readonly payos: PayOS;
+
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
-    @InjectModel(Order.name) private orderModel: Model<OrderDocument>
-  ) {}
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    private configService: ConfigService
+  ) {
+    const clientId = this.configService.get<string>('PAYOS_CLIENT_ID') || '';
+    const apiKey = this.configService.get<string>('PAYOS_API_KEY') || '';
+    const checksumKey = this.configService.get<string>('PAYOS_CHECKSUM_KEY') || '';
+
+    if (!clientId || !apiKey || !checksumKey) {
+      console.error('PayOS credentials missing:', {
+        hasClientId: !!clientId,
+        hasApiKey: !!apiKey,
+        hasChecksumKey: !!checksumKey,
+      });
+    } else {
+      this.payos = new PayOS({
+        clientId,
+        apiKey,
+        checksumKey,
+      });
+    }
+  }
 
   async create(createPaymentDto: CreatePaymentDto): Promise<Payment> {
     const { guest, user, orders } = createPaymentDto;
@@ -98,5 +123,217 @@ async getTotalRevenue(): Promise<number> {
     }
 
     await this.paymentModel.findByIdAndDelete(id).exec();
+  }
+
+  async createPayOSPaymentLink(createPayOSLinkDto: CreatePayOSLinkDto) {
+    const { orderId, amount, description } = createPayOSLinkDto;
+
+    // Validate PayOS is initialized
+    if (!this.payos) {
+      throw new BadRequestException(
+        'PayOS payment is not configured. Please contact administrator.'
+      );
+    }
+
+    // Verify order exists and populate items for PayOS
+    const order = await this.orderModel
+      .findById(orderId)
+      .populate('items.item', 'name price')
+      .exec();
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    console.log('Creating PayOS payment link for order:', {
+      orderId,
+      amount,
+      description,
+    });
+
+    // Generate order code (must be unique and between 100000 and 999999)
+    // Check if order already has a payosOrderCode to avoid duplicates
+    let orderCode: number;
+    if ((order as any).payosOrderCode) {
+      orderCode = (order as any).payosOrderCode;
+    } else {
+      orderCode = Math.floor(100000 + Math.random() * 900000);
+    }
+
+    // Build items array from order items for PayOS
+    const items = order.items.map((item: any) => {
+      const menuItem = item.item;
+      const itemName = typeof menuItem === 'object' && menuItem?.name 
+        ? menuItem.name 
+        : 'Item';
+      const itemPrice = item.unitPrice || (typeof menuItem === 'object' && menuItem?.price ? menuItem.price : 0);
+      
+      return {
+        name: itemName,
+        quantity: item.quantity || 1,
+        price: Math.round(itemPrice),
+      };
+    });
+
+    const feUrl = this.configService.get<string>('FE_URL') || 'http://localhost:3000';
+
+    // PayOS requires description to be max 25 characters
+    const maxDescriptionLength = 25;
+    let paymentDescription: string;
+    
+    if (description && description.trim()) {
+      // Use provided description, truncate if needed
+      paymentDescription = description.trim();
+      if (paymentDescription.length > maxDescriptionLength) {
+        paymentDescription = paymentDescription.substring(0, maxDescriptionLength);
+      }
+    } else {
+      // Generate short description from orderId (last 8 chars)
+      const shortOrderId = orderId.slice(-8);
+      paymentDescription = `Order #${shortOrderId}`;
+      // Ensure it's within limit
+      if (paymentDescription.length > maxDescriptionLength) {
+        paymentDescription = paymentDescription.substring(0, maxDescriptionLength);
+      }
+    }
+
+    try {
+      // Use PayOS SDK to create payment link
+      const paymentLink = await this.payos.paymentRequests.create({
+        orderCode: orderCode,
+        amount: Math.round(amount), // PayOS requires integer amount
+        description: paymentDescription,
+        returnUrl: `${feUrl}/payment/success`,
+        cancelUrl: `${feUrl}/payment/cancel`,
+        items: items.length > 0 ? items : [
+          {
+            name: `Order #${orderId}`,
+            quantity: 1,
+            price: Math.round(amount),
+          }
+        ],
+      });
+
+      console.log('PayOS payment link created:', {
+        orderCode,
+        checkoutUrl: paymentLink.checkoutUrl,
+      });
+
+      // Store order code in order for later verification
+      (order as any).payosOrderCode = orderCode;
+      await order.save();
+
+      return {
+        success: true,
+        paymentLink: paymentLink.checkoutUrl,
+        orderCode: orderCode,
+      };
+    } catch (error: any) {
+      console.error('PayOS API error:', error);
+      
+      // Handle PayOS SDK errors
+      if (error.code !== undefined) {
+        throw new BadRequestException(
+          error.desc || `PayOS API error: code ${error.code}`
+        );
+      }
+      
+      throw new BadRequestException(
+        `PayOS API error: ${error.message || 'Unknown error'}`
+      );
+    }
+  }
+
+  async confirmPayOSPayment(confirmDto: ConfirmPayOSPaymentDto) {
+    const { orderId, orderCode, amount } = confirmDto;
+
+    // Validate PayOS is initialized
+    if (!this.payos) {
+      throw new BadRequestException(
+        'PayOS payment is not configured. Please contact administrator.'
+      );
+    }
+
+    // Verify order exists
+    const order = await this.orderModel.findById(orderId).exec();
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Verify order code matches
+    if ((order as any).payosOrderCode !== orderCode) {
+      throw new BadRequestException('Invalid order code');
+    }
+
+    // Verify amount matches
+    if (Math.round(order.totalPrice) !== Math.round(amount)) {
+      throw new BadRequestException('Amount mismatch');
+    }
+
+    try {
+      // Use PayOS SDK to get payment information
+      const paymentInfo = await this.payos.paymentRequests.get(orderCode);
+
+      console.log('PayOS payment info:', {
+        orderCode: paymentInfo.orderCode,
+        status: paymentInfo.status,
+        code: (paymentInfo as any).code,
+        transactionDateTime: (paymentInfo as any).transactionDateTime,
+      });
+
+      // Check if payment is successful
+      // PayOS SDK status values: PENDING, CANCELLED, UNDERPAID, EXPIRED, PROCESSING, FAILED
+      // Payment is considered successful if:
+      // 1. Has transactionDateTime (indicates payment was completed)
+      // 2. Or status is not in failed states
+      const hasTransaction = (paymentInfo as any).transactionDateTime !== null && 
+                            (paymentInfo as any).transactionDateTime !== undefined;
+      const isSuccessCode = (paymentInfo as any).code === '00';
+      const isNotFailed = paymentInfo.status !== 'FAILED' && 
+                         paymentInfo.status !== 'CANCELLED' && 
+                         paymentInfo.status !== 'EXPIRED';
+      
+      // Payment is successful if it has transaction data or success code
+      const isPaid = hasTransaction || isSuccessCode;
+      
+      if (isPaid) {
+        // Mark order as paid
+        order.isPaid = true;
+        await order.save();
+
+        // Create payment record
+        const payment = new this.paymentModel({
+          method: 'qr',
+          amount: amount,
+          paidAt: new Date(),
+          user: order.user,
+          orders: [order._id],
+        });
+        await payment.save();
+
+        return {
+          success: true,
+          message: 'Payment confirmed successfully',
+        };
+      } else {
+        throw new BadRequestException(
+          `Payment not completed. Status: ${paymentInfo.status}`
+        );
+      }
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      // Handle PayOS SDK errors
+      if (error.code !== undefined) {
+        throw new BadRequestException(
+          error.desc || `PayOS API error: code ${error.code}`
+        );
+      }
+      
+      throw new BadRequestException(
+        `PayOS verification error: ${error.message || 'Unknown error'}`
+      );
+    }
   }
 }

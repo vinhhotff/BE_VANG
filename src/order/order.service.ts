@@ -266,7 +266,7 @@ export class OrderService {
     const order = await this.orderModel
       .findById(id)
       .populate('items.item', 'name price category images')
-      .populate('guest', 'tableCode')
+      .populate('guest', 'guestName guestPhone tableName')
       .populate('user', 'name email')
       .exec();
 

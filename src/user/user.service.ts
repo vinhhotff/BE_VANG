@@ -51,11 +51,11 @@ import { SoftDeleteModel } from 'soft-delete-plugin-mongoose';
 import mongoose, { Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { PaginationResult, SearchUserDto } from './dto/user.dto';
-import { 
-  PaginationQueryDto, 
-  PaginationResponseDto, 
-  buildSortObject, 
-  buildSearchFilter 
+import {
+  PaginationQueryDto,
+  PaginationResponseDto,
+  buildSortObject,
+  buildSearchFilter,
 } from '../common/dto/pagination.dto';
 @Injectable()
 export class UserService {
@@ -113,7 +113,9 @@ export class UserService {
   }
 
   // Chuẩn hóa search users theo format mới
-  async searchUsers(query: SearchUserDto): Promise<PaginationResponseDto<User>> {
+  async searchUsers(
+    query: SearchUserDto
+  ): Promise<PaginationResponseDto<User>> {
     const {
       page = 1,
       limit = 10,
@@ -135,9 +137,39 @@ export class UserService {
       filter = { ...filter, ...searchFilter };
     }
 
-    // Xử lý role filter
+    // Xử lý role filter - tìm role theo tên và lấy ObjectId
     if (role && role !== 'all') {
-      filter.role = role;
+      try {
+        const roleModel = this.userModel.db.model('Role');
+        const matchingRoles = await roleModel
+          .find({
+            name: { $regex: new RegExp(`^${role}$`, 'i') }, // Exact match (case-insensitive)
+          })
+          .select('_id name')
+          .exec();
+
+        if (matchingRoles.length > 0) {
+          // Use ObjectId for filtering
+          const roleIds = matchingRoles.map((r) => r._id);
+          filter.role = { $in: roleIds };
+          console.log(
+            `🔍 Filtering by role: ${role} -> ${roleIds.length} role(s) found`
+          );
+        } else {
+          console.warn(`⚠️ No role found with name: ${role}`);
+          // Return empty result if role not found
+          filter.role = { $in: [] };
+        }
+      } catch (error) {
+        console.error('❌ Error finding role:', error);
+        // Fallback: try to use role as ObjectId if it's a valid ObjectId
+        if (Types.ObjectId.isValid(role)) {
+          filter.role = new Types.ObjectId(role);
+        } else {
+          // Return empty result if role is invalid
+          filter.role = { $in: [] };
+        }
+      }
     }
 
     // Xử lý status filter (nếu có)
@@ -170,26 +202,46 @@ export class UserService {
         select: 'name', // Chỉ lấy tên của role
       })
       .select('-password -refreshToken') // Loại bỏ password và refreshToken
+      .lean() // Convert to plain JavaScript objects for better performance
       .exec();
 
     console.log(`✅ Found ${data.length} users on page ${page}`);
-    console.log('🔍 First user sample:', {
+    console.log('🔍 First user sample (before normalization):', {
       name: data[0]?.name,
       email: data[0]?.email,
       role: data[0]?.role,
     });
 
-    // Trả về theo format chuẩn
-    const result = new PaginationResponseDto(data, total, page, limit);
-    
+    // Normalize role từ object sang string
+    // Role có thể là: { _id: '...', name: 'user' } hoặc string
+    const normalizedUsers = data.map((user: any) => ({
+      ...user,
+      role:
+        typeof user.role === 'string' ? user.role : user.role?.name || 'user',
+    }));
+
+    console.log('🔍 First user sample (after normalization):', {
+      name: normalizedUsers[0]?.name,
+      email: normalizedUsers[0]?.email,
+      role: normalizedUsers[0]?.role,
+    });
+
+    // Trả về theo format chuẩn với normalized users
+    const result = new PaginationResponseDto(
+      normalizedUsers,
+      total,
+      page,
+      limit
+    );
+
     console.log('🚀 User Service - Returning standardized format:', {
       hasData: !!result.data,
       dataLength: result.data ? result.data.length : 0,
       hasMeta: !!result.meta,
       metaTotal: result.meta ? result.meta.total : 'no meta',
-      resultKeys: Object.keys(result)
+      resultKeys: Object.keys(result),
     });
-    
+
     return result;
   }
 
