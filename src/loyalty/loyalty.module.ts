@@ -6,9 +6,7 @@ import { Loyalty, LoyaltySchema } from './schemas/loyalty.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Loyalty.name, schema: LoyaltySchema },
-    ]),
+    MongooseModule.forFeature([{ name: Loyalty.name, schema: LoyaltySchema }]),
   ],
   controllers: [LoyaltyController],
   providers: [LoyaltyService],

@@ -20,10 +20,10 @@ import { User } from '../user/schemas/user.schema';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { MarkOrderPaidDto } from './dto/update-order.dto';
 import { DeliveryService } from '../delivery/delivery.service';
-import { 
-  PaginationResponseDto, 
-  buildSortObject, 
-  buildSearchFilter 
+import {
+  PaginationResponseDto,
+  buildSortObject,
+  buildSearchFilter,
 } from '../common/dto/pagination.dto';
 
 @Injectable()
@@ -35,7 +35,7 @@ export class OrderService {
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly loyaltyService: LoyaltyService,
     private readonly deliveryService: DeliveryService
-  ) { }
+  ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
     const { items, guest, user } = createOrderDto;
@@ -215,7 +215,7 @@ export class OrderService {
   ): Promise<PaginationResponseDto<Order>> {
     // Build filter object
     let filter: any = {};
-    
+
     // Handle search parameter
     if (search && search.trim()) {
       // Search in guest table code or customer info
@@ -223,11 +223,11 @@ export class OrderService {
         $or: [
           { customerName: { $regex: search, $options: 'i' } },
           { customerPhone: { $regex: search, $options: 'i' } },
-        ]
+        ],
       };
       filter = { ...filter, ...searchFilter };
     }
-    
+
     if (status) filter.status = status;
     if (guest) filter.guest = guest;
     if (user) filter.user = user;
@@ -251,7 +251,9 @@ export class OrderService {
       .limit(limit)
       .exec();
 
-    console.log(`✅ Order findAll - Found ${orders.length} orders on page ${page}`);
+    console.log(
+      `✅ Order findAll - Found ${orders.length} orders on page ${page}`
+    );
 
     return new PaginationResponseDto(orders, total, page, limit);
   }
@@ -310,14 +312,17 @@ export class OrderService {
       receivedStatus: status,
       statusType: typeof status,
       validStatuses: Object.values(OrderStatus),
-      isStatusValid: Object.values(OrderStatus).includes(status)
+      isStatusValid: Object.values(OrderStatus).includes(status),
     });
 
     if (!Object.values(OrderStatus).includes(status)) {
       console.error('❌ Status validation failed:', {
         received: status,
         expected: Object.values(OrderStatus),
-        comparison: Object.values(OrderStatus).map(s => ({ value: s, matches: s === status }))
+        comparison: Object.values(OrderStatus).map((s) => ({
+          value: s,
+          matches: s === status,
+        })),
       });
       throw new BadRequestException('Invalid order status');
     }
