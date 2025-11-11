@@ -29,9 +29,41 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<string>('PORT');
+  
+  // CORS configuration - allow Vercel preview deployments and production
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    configService.get<string>('FE_URL'),
+    'https://nesjt-agoda-fe.vercel.app',
+  ].filter(Boolean); // Remove undefined values
+
   app.enableCors({
     allowedHeaders: ['content-type', 'authorization'],
-    origin: configService.get<string>('FE_URL') || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Allow all Vercel preview deployments (*.vercel.app)
+      if (origin.includes('.vercel.app')) {
+        return callback(null, true);
+      }
+
+      // Allow localhost with any port
+      if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        return callback(null, true);
+      }
+
+      // Reject other origins
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   });
   app.use(bodyParser.json({ limit: '10mb' }));
