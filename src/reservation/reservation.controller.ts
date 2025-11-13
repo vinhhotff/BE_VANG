@@ -72,14 +72,6 @@ export class ReservationController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Permission('reservation:findOne')
-  @CustomMessage('Lấy đặt bàn theo ID')
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.reservationService.findById(id);
-  }
-
-  @UseGuards(JwtAuthGuard)
   @Permission('reservation:getMyReservations')
   @CustomMessage('Lấy đặt bàn của tôi')
   @Get('my/reservations')
@@ -93,6 +85,14 @@ export class ReservationController {
   @Get('phone/:phone')
   findByPhone(@Param('phone') phone: string) {
     return this.reservationService.findByPhone(phone);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:findOne')
+  @CustomMessage('Lấy đặt bàn theo ID')
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.reservationService.findById(id);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -20,7 +20,7 @@ export class Reservation extends Document {
   @Prop({ required: true })
   customerPhone: string;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   customerEmail?: string;
 
   @Prop({ required: true })

@@ -166,8 +166,14 @@ export class ReservationService {
     const reservation = await this.findById(id);
 
     // Kiểm tra quyền hủy (chỉ user tạo hoặc admin mới được hủy)
-    if (userId && reservation.user.toString() !== userId) {
-      throw new BadRequestException('Bạn không có quyền hủy đặt bàn này');
+    if (userId && reservation.user) {
+      const user = reservation.user;
+      const reservationUserId = typeof user === 'object' && '_id' in user
+        ? String(user._id)
+        : String(user);
+      if (reservationUserId !== userId) {
+        throw new BadRequestException('Bạn không có quyền hủy đặt bàn này');
+      }
     }
 
     // Chỉ có thể hủy khi còn pending hoặc confirmed
