@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -13,6 +15,8 @@ import { UpdatePaymentDto } from './dto/update-pay-ment.dto';
 import { CreatePayOSLinkDto } from './dto/create-payos-link.dto';
 import { ConfirmPayOSPaymentDto } from './dto/confirm-payos-payment.dto';
 import { Order, OrderDocument } from '../order/schemas/order.schema';
+import { OrderService } from '../order/order.service';
+import { OrderStatus } from '../order/schemas/order.schema';
 
 @Injectable()
 export class PayMentService {
@@ -21,7 +25,9 @@ export class PayMentService {
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
-    private configService: ConfigService
+    private configService: ConfigService,
+    @Inject(forwardRef(() => OrderService))
+    private orderService: OrderService,
   ) {
     const clientId = this.configService.get<string>('PAYOS_CLIENT_ID') || '';
     const apiKey = this.configService.get<string>('PAYOS_API_KEY') || '';
@@ -305,6 +311,14 @@ async getTotalRevenue(): Promise<number> {
         // Mark order as paid
         order.isPaid = true;
         await order.save();
+
+        // Update order status to served automatically when payment is confirmed
+        try {
+          await this.orderService.updateStatus(order._id.toString(), OrderStatus.SERVED);
+        } catch (statusError) {
+          // Log error but don't fail the payment confirmation
+          console.error('Error updating order status to served:', statusError);
+        }
 
         // Create payment record
         const payment = new this.paymentModel({

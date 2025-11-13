@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { Permission, Public } from '../auth/decoration/setMetadata';
 import { OrderService } from './order.service';
@@ -66,6 +67,15 @@ export class OrderController {
   @Get('guest/:guestId')
   findByGuest(@Param('guestId') guestId: string) {
     return this.orderService.findByGuest(guestId);
+  }
+
+  @Permission('order:findByUser')
+  @Get('user')
+  findByUser(@Query('userId') userId: string) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.orderService.findByUser(userId);
   }
 
   @Permission('order:updateStatus')

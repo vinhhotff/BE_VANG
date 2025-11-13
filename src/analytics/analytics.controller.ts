@@ -1,6 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
-import { Permission } from '../auth/decoration/setMetadata';
+import { Permission, Public } from '../auth/decoration/setMetadata';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -39,6 +39,7 @@ export class AnalyticsController {
   }
 
   // Menu Items Analytics Endpoints
+  @Public()
   @Get('menu-items/top-selling')
   async getTopSellingItems(
     @Query('period') period?: string,

@@ -28,9 +28,12 @@ export class LoyaltyService {
       throw new BadRequestException('ID user không hợp lệ');
     }
 
-    const loyalty = await this.loyaltyModel.findOne({ user: userId }).populate('user', 'name email').exec();
+    let loyalty = await this.loyaltyModel.findOne({ user: userId }).populate('user', 'name email').exec();
     if (!loyalty) {
-      throw new NotFoundException('Không tìm thấy tài khoản loyalty');
+      // Tạo tài khoản loyalty mặc định nếu chưa có
+      loyalty = new this.loyaltyModel({ user: userId, points: 0 });
+      loyalty = await loyalty.save();
+      await loyalty.populate('user', 'name email');
     }
     return loyalty;
   }
