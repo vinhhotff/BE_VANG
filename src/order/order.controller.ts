@@ -57,10 +57,14 @@ export class OrderController {
     );
   }
 
-  @Permission('order:findOne')
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.orderService.findById(id);
+  // Specific routes must come before parameterized routes
+  @Permission('order:findByUser')
+  @Get('user')
+  findByUser(@Query('userId') userId: string) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.orderService.findByUser(userId);
   }
 
   @Permission('order:findByGuest')
@@ -69,13 +73,10 @@ export class OrderController {
     return this.orderService.findByGuest(guestId);
   }
 
-  @Permission('order:findByUser')
-  @Get('user')
-  findByUser(@Query('userId') userId: string) {
-    if (!userId) {
-      throw new BadRequestException('userId is required');
-    }
-    return this.orderService.findByUser(userId);
+  @Permission('order:findOne')
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.orderService.findById(id);
   }
 
   @Permission('order:updateStatus')
