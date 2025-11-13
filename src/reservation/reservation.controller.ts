@@ -17,10 +17,16 @@ import { IUser } from '../user/user.interface';
 import { ReservationStatus } from './schemas/reservation.schema';
 
 @Controller('reservations')
-@UseGuards(JwtAuthGuard)
 export class ReservationController {
   constructor(private readonly reservationService: ReservationService) {}
 
+  // Public endpoint - không cần authentication
+  @Post('public')
+  createPublic(@Body() createReservationDto: CreateReservationDto) {
+    return this.reservationService.createPublic(createReservationDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:create')
   @CustomMessage('Tạo đặt bàn mới')
   @Post()
@@ -28,6 +34,7 @@ export class ReservationController {
     return this.reservationService.create(createReservationDto, user);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:findAll')
   @CustomMessage('Lấy danh sách đặt bàn với phân trang')
   @Get()
@@ -40,6 +47,7 @@ export class ReservationController {
     return this.reservationService.findAll(+page, +limit, status, date);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:getTodayReservations')
   @CustomMessage('Lấy danh sách đặt bàn hôm nay')
   @Get('today')
@@ -47,6 +55,7 @@ export class ReservationController {
     return this.reservationService.getTodayReservations();
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:getUpcomingReservations')
   @CustomMessage('Lấy danh sách đặt bàn sắp tới')
   @Get('upcoming')
@@ -54,6 +63,7 @@ export class ReservationController {
     return this.reservationService.getUpcomingReservations(+days);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:getReservationStats')
   @CustomMessage('Lấy thống kê đặt bàn')
   @Get('stats')
@@ -61,6 +71,7 @@ export class ReservationController {
     return this.reservationService.getReservationStats();
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:findOne')
   @CustomMessage('Lấy đặt bàn theo ID')
   @Get(':id')
@@ -68,6 +79,7 @@ export class ReservationController {
     return this.reservationService.findById(id);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:getMyReservations')
   @CustomMessage('Lấy đặt bàn của tôi')
   @Get('my/reservations')
@@ -75,6 +87,7 @@ export class ReservationController {
     return this.reservationService.findByUser(user._id.toString());
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:findByPhone')
   @CustomMessage('Lấy đặt bàn theo số điện thoại')
   @Get('phone/:phone')
@@ -82,6 +95,7 @@ export class ReservationController {
     return this.reservationService.findByPhone(phone);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:updateStatus')
   @CustomMessage('Cập nhật trạng thái đặt bàn')
   @Patch(':id/status')
@@ -92,6 +106,7 @@ export class ReservationController {
     return this.reservationService.updateStatus(id, updateStatusDto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:cancel')
   @CustomMessage('Hủy đặt bàn')
   @Patch(':id/cancel')
@@ -99,6 +114,7 @@ export class ReservationController {
     return this.reservationService.cancel(id, user._id.toString());
   }
 
+  @UseGuards(JwtAuthGuard)
   @Permission('reservation:adminCancel')
   @CustomMessage('Hủy đặt bàn (admin)')
   @Delete(':id')

@@ -10,5 +10,13 @@ export class CreatePayOSLinkDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsString()
+  returnUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  cancelUrl?: string;
 }
 

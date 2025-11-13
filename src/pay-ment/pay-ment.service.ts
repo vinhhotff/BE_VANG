@@ -126,7 +126,7 @@ async getTotalRevenue(): Promise<number> {
   }
 
   async createPayOSPaymentLink(createPayOSLinkDto: CreatePayOSLinkDto) {
-    const { orderId, amount, description } = createPayOSLinkDto;
+    const { orderId, amount, description, returnUrl, cancelUrl } = createPayOSLinkDto;
 
     // Validate PayOS is initialized
     if (!this.payos) {
@@ -174,7 +174,13 @@ async getTotalRevenue(): Promise<number> {
       };
     });
 
-    const feUrl = this.configService.get<string>('FE_URL') || 'http://localhost:3000';
+    // Get frontend URL - prioritize provided URLs, then env var, then default
+    const defaultFeUrl = this.configService.get<string>('FE_URL') || 'https://nesjt-agoda-fe-git-v1-vinhhoffs-projects.vercel.app';
+    const feUrl = defaultFeUrl.replace(/\/+$/, ''); // Remove trailing slashes
+    
+    // Use provided returnUrl/cancelUrl if available, otherwise use default
+    const finalReturnUrl = returnUrl || `${feUrl}/payment/success`;
+    const finalCancelUrl = cancelUrl || `${feUrl}/payment/cancel`;
 
     // PayOS requires description to be max 25 characters
     const maxDescriptionLength = 25;
@@ -202,8 +208,8 @@ async getTotalRevenue(): Promise<number> {
         orderCode: orderCode,
         amount: Math.round(amount), // PayOS requires integer amount
         description: paymentDescription,
-        returnUrl: `${feUrl}/payment/success`,
-        cancelUrl: `${feUrl}/payment/cancel`,
+        returnUrl: finalReturnUrl,
+        cancelUrl: finalCancelUrl,
         items: items.length > 0 ? items : [
           {
             name: `Order #${orderId}`,

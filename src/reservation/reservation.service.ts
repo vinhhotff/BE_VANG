@@ -44,6 +44,39 @@ export class ReservationService {
     return reservation.save();
   }
 
+  async createPublic(createReservationDto: CreateReservationDto): Promise<Reservation> {
+    const reservationDate = new Date(createReservationDto.reservationDate);
+    
+    // Kiểm tra ngày đặt bàn không được trong quá khứ
+    if (reservationDate < new Date()) {
+      throw new BadRequestException('Ngày đặt bàn không thể trong quá khứ');
+    }
+
+    // Kiểm tra xem có đặt trùng giờ không (có thể mở rộng logic này)
+    const existingReservation = await this.reservationModel
+      .findOne({
+        customerPhone: createReservationDto.customerPhone,
+        reservationDate: {
+          $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000), // 2 giờ trước
+          $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000), // 2 giờ sau
+        },
+        status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
+      })
+      .exec();
+
+    if (existingReservation) {
+      throw new ConflictException('Bạn đã có đặt bàn trong khoảng thời gian này');
+    }
+
+    const reservation = new this.reservationModel({
+      ...createReservationDto,
+      reservationDate,
+      // user field is optional, không cần set cho public reservations
+    });
+
+    return reservation.save();
+  }
+
   async findAll(
     page: number = 1,
     limit: number = 10,
