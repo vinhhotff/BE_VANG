@@ -10,9 +10,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ReservationService } from './reservation.service';
-import { CreateReservationDto, UpdateReservationStatusDto } from './dto/create-reservation.dto';
+import {
+  CreateReservationDto,
+  UpdateReservationStatusDto,
+} from './dto/create-reservation.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { User, CustomMessage, Permission } from '../auth/decoration/setMetadata';
+import {
+  User,
+  CustomMessage,
+  Permission,
+  Public,
+} from '../auth/decoration/setMetadata';
 import { IUser } from '../user/user.interface';
 import { ReservationStatus } from './schemas/reservation.schema';
 
@@ -22,6 +30,7 @@ export class ReservationController {
 
   // Public endpoint - không cần authentication
   @Post('public')
+  @Public()
   createPublic(@Body() createReservationDto: CreateReservationDto) {
     return this.reservationService.createPublic(createReservationDto);
   }
@@ -30,7 +39,10 @@ export class ReservationController {
   @Permission('reservation:create')
   @CustomMessage('Tạo đặt bàn mới')
   @Post()
-  create(@Body() createReservationDto: CreateReservationDto, @User() user: IUser) {
+  create(
+    @Body() createReservationDto: CreateReservationDto,
+    @User() user: IUser
+  ) {
     return this.reservationService.create(createReservationDto, user);
   }
 
@@ -42,7 +54,7 @@ export class ReservationController {
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
     @Query('status') status?: ReservationStatus,
-    @Query('date') date?: string,
+    @Query('date') date?: string
   ) {
     return this.reservationService.findAll(+page, +limit, status, date);
   }
@@ -101,7 +113,7 @@ export class ReservationController {
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
-    @Body() updateStatusDto: UpdateReservationStatusDto,
+    @Body() updateStatusDto: UpdateReservationStatusDto
   ) {
     return this.reservationService.updateStatus(id, updateStatusDto);
   }
