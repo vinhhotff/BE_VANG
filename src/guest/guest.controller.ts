@@ -23,6 +23,12 @@ export class GuestController {
     return this.guestService.create(dto);
   }
 
+  @Permission('guest:findAll')
+  @Get()
+  findAll(@Query('tableName') tableName?: string) {
+    return this.guestService.findAll({ tableName });
+  }
+
   @Permission('guest:findByTableName')
   @Get('table')
   findByTableName(@Query('tableName') tableName: string) {

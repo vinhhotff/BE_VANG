@@ -10,14 +10,21 @@ export class Table {
   @Prop({ required: true })
   tableName: string;
 
-  @Prop({ required: true })
-  location: string;
+  @Prop({ required: false })
+  location?: string;
 
   @Prop({ required: true, enum: ['available', 'occupied', 'reserved'] })
   status: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Order', default: null })
   currentOrder: Order;
+
+  @Prop({ type: Number, default: 1, min: 1 })
+  width: number; // Số ô chiếm theo chiều ngang
+
+  @Prop({ type: Number, default: 1, min: 1 })
+  height: number; // Số ô chiếm theo chiều dọc
+
   @Prop({ type: Object })
   updatedBy: {
     _id: mongoose.Schema.Types.ObjectId;

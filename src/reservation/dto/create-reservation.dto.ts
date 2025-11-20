@@ -35,6 +35,10 @@ export class CreateReservationDto {
   @IsOptional()
   @IsString()
   specialRequests?: string;
+
+  @IsOptional()
+  @IsString()
+  tableNumber?: string;
 }
 
 export class UpdateReservationStatusDto {

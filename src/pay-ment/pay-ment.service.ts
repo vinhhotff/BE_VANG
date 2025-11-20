@@ -141,44 +141,69 @@ async getTotalRevenue(): Promise<number> {
       );
     }
 
-    // Verify order exists and populate items for PayOS
-    const order = await this.orderModel
-      .findById(orderId)
-      .populate('items.item', 'name price')
-      .exec();
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-
-    console.log('Creating PayOS payment link for order:', {
-      orderId,
-      amount,
-      description,
-    });
-
-    // Generate order code (must be unique and between 100000 and 999999)
-    // Check if order already has a payosOrderCode to avoid duplicates
+    // Check if this is a reservation payment (orderId starts with "reservation_")
+    const isReservationPayment = orderId && orderId.startsWith('reservation_');
+    
+    let order: any = null;
     let orderCode: number;
-    if ((order as any).payosOrderCode) {
-      orderCode = (order as any).payosOrderCode;
-    } else {
-      orderCode = Math.floor(100000 + Math.random() * 900000);
-    }
+    let items: any[] = [];
 
-    // Build items array from order items for PayOS
-    const items = order.items.map((item: any) => {
-      const menuItem = item.item;
-      const itemName = typeof menuItem === 'object' && menuItem?.name 
-        ? menuItem.name 
-        : 'Item';
-      const itemPrice = item.unitPrice || (typeof menuItem === 'object' && menuItem?.price ? menuItem.price : 0);
-      
-      return {
-        name: itemName,
-        quantity: item.quantity || 1,
-        price: Math.round(itemPrice),
-      };
-    });
+    if (isReservationPayment) {
+      // For reservation payments, generate order code directly
+      orderCode = Math.floor(100000 + Math.random() * 900000);
+      // Use default item for reservation deposit
+      items = [
+        {
+          name: description || 'Đặt cọc giữ bàn',
+          quantity: 1,
+          price: Math.round(amount),
+        }
+      ];
+      console.log('Creating PayOS payment link for reservation:', {
+        orderId,
+        amount,
+        description,
+        orderCode,
+      });
+    } else {
+      // For regular orders, verify order exists and populate items
+      order = await this.orderModel
+        .findById(orderId)
+        .populate('items.item', 'name price')
+        .exec();
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+
+      console.log('Creating PayOS payment link for order:', {
+        orderId,
+        amount,
+        description,
+      });
+
+      // Generate order code (must be unique and between 100000 and 999999)
+      // Check if order already has a payosOrderCode to avoid duplicates
+      if ((order as any).payosOrderCode) {
+        orderCode = (order as any).payosOrderCode;
+      } else {
+        orderCode = Math.floor(100000 + Math.random() * 900000);
+      }
+
+      // Build items array from order items for PayOS
+      items = order.items.map((item: any) => {
+        const menuItem = item.item;
+        const itemName = typeof menuItem === 'object' && menuItem?.name 
+          ? menuItem.name 
+          : 'Item';
+        const itemPrice = item.unitPrice || (typeof menuItem === 'object' && menuItem?.price ? menuItem.price : 0);
+        
+        return {
+          name: itemName,
+          quantity: item.quantity || 1,
+          price: Math.round(itemPrice),
+        };
+      });
+    }
 
     // Get frontend URL - prioritize provided URLs, then env var, then default
     const defaultFeUrl = this.configService.get<string>('FE_URL') || 'https://nesjt-agoda-fe-git-v1-vinhhoffs-projects.vercel.app';
@@ -199,9 +224,13 @@ async getTotalRevenue(): Promise<number> {
         paymentDescription = paymentDescription.substring(0, maxDescriptionLength);
       }
     } else {
-      // Generate short description from orderId (last 8 chars)
-      const shortOrderId = orderId.slice(-8);
-      paymentDescription = `Order #${shortOrderId}`;
+      if (isReservationPayment) {
+        paymentDescription = 'Đặt cọc giữ bàn';
+      } else {
+        // Generate short description from orderId (last 8 chars)
+        const shortOrderId = orderId.slice(-8);
+        paymentDescription = `Order #${shortOrderId}`;
+      }
       // Ensure it's within limit
       if (paymentDescription.length > maxDescriptionLength) {
         paymentDescription = paymentDescription.substring(0, maxDescriptionLength);
@@ -228,11 +257,14 @@ async getTotalRevenue(): Promise<number> {
       console.log('PayOS payment link created:', {
         orderCode,
         checkoutUrl: paymentLink.checkoutUrl,
+        isReservationPayment,
       });
 
-      // Store order code in order for later verification
-      (order as any).payosOrderCode = orderCode;
-      await order.save();
+      // Store order code in order for later verification (only for regular orders)
+      if (!isReservationPayment && order) {
+        (order as any).payosOrderCode = orderCode;
+        await order.save();
+      }
 
       return {
         success: true,

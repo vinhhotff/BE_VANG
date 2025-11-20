@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Types } from 'mongoose';
 
 export class UpdateTableDto {
@@ -16,5 +16,15 @@ export class UpdateTableDto {
 
   @IsOptional()
   currentOrder?: Types.ObjectId;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  width?: number;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  height?: number;
 }
 

@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { TableService } from './table.service';
-import { Permission } from '../auth/decoration/setMetadata';
+import { Permission, Public } from '../auth/decoration/setMetadata';
 import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
 import { CustomMessage, User } from 'src/auth/decoration/setMetadata';
@@ -24,7 +24,7 @@ export class TableController {
   create(@Body() createTableDto: CreateTableDto) {
     return this.tableService.create(createTableDto);
   }
-  @Permission('table:findAll')
+  @Public() // Public endpoint - cho phép guest xem danh sách bàn để đặt
   @Get()
   @CustomMessage('Get all tables')
   async findAll(

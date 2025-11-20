@@ -46,10 +46,9 @@ export class ReservationController {
     return this.reservationService.create(createReservationDto, user);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Permission('reservation:findAll')
-  @CustomMessage('Lấy danh sách đặt bàn với phân trang')
+  @Public() // Public endpoint - cho phép guest check availability
   @Get()
+  @CustomMessage('Lấy danh sách đặt bàn với phân trang')
   findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',

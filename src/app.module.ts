@@ -24,6 +24,8 @@ import { AboutModule } from './about/about.module';
 
 import { DeliveryModule } from './delivery/delivery.module';
 import { VoucherModule } from './voucher/voucher.module';
+import { RestaurantModule } from './restaurant/restaurant.module';
+import { ZoneModule } from './zone/zone.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { VoucherModule } from './voucher/voucher.module';
     AboutModule,
     DeliveryModule,
     VoucherModule,
+    RestaurantModule,
+    ZoneModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 import { Types } from 'mongoose';
 
 export class CreateTableDto {
@@ -7,8 +7,8 @@ export class CreateTableDto {
   tableName: string;
 
   @IsString()
-  @IsNotEmpty()
-  location: string;
+  @IsOptional()
+  location?: string;
 
   @IsEnum(['available', 'occupied', 'reserved'])
   @IsOptional()
@@ -16,5 +16,15 @@ export class CreateTableDto {
 
   @IsOptional()
   currentOrder?: Types.ObjectId;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  width?: number = 1;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  height?: number = 1;
 }
 

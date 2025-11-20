@@ -35,6 +35,26 @@ export class ReservationService {
       throw new ConflictException('Bạn đã có đặt bàn trong khoảng thời gian này');
     }
 
+    // Kiểm tra nếu có chọn bàn, check xem bàn đã được đặt chưa
+    if (createReservationDto.tableNumber) {
+      const tableReservation = await this.reservationModel
+        .findOne({
+          tableNumber: createReservationDto.tableNumber,
+          reservationDate: {
+            $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000), // 2 giờ trước
+            $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000), // 2 giờ sau
+          },
+          status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
+        })
+        .exec();
+
+      if (tableReservation) {
+        throw new ConflictException(
+          `Bàn ${createReservationDto.tableNumber} đã được đặt trong khoảng thời gian này. Vui lòng chọn bàn khác.`
+        );
+      }
+    }
+
     const reservation = new this.reservationModel({
       ...createReservationDto,
       user: user._id,
@@ -66,6 +86,26 @@ export class ReservationService {
 
     if (existingReservation) {
       throw new ConflictException('Bạn đã có đặt bàn trong khoảng thời gian này');
+    }
+
+    // Kiểm tra nếu có chọn bàn, check xem bàn đã được đặt chưa
+    if (createReservationDto.tableNumber) {
+      const tableReservation = await this.reservationModel
+        .findOne({
+          tableNumber: createReservationDto.tableNumber,
+          reservationDate: {
+            $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000), // 2 giờ trước
+            $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000), // 2 giờ sau
+          },
+          status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
+        })
+        .exec();
+
+      if (tableReservation) {
+        throw new ConflictException(
+          `Bàn ${createReservationDto.tableNumber} đã được đặt trong khoảng thời gian này. Vui lòng chọn bàn khác.`
+        );
+      }
     }
 
     const reservation = new this.reservationModel({

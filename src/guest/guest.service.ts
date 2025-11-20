@@ -42,7 +42,15 @@ export class GuestService {
 
     return guest.save();
   }
- async findGuestByTableName(tableName: string): Promise<Guest | null> {
+  async findAll(params?: { tableName?: string }): Promise<Guest[]> {
+    const query: any = {};
+    if (params?.tableName) {
+      query.tableName = params.tableName;
+    }
+    return this.guestModel.find(query).exec();
+  }
+
+  async findGuestByTableName(tableName: string): Promise<Guest | null> {
   return this.guestModel
     .findOne({ tableName})
     .exec();
