@@ -7,8 +7,9 @@ import { MenuItem, MenuItemSchema } from '../menu-item/schemas/menu-item.schema'
 import { Guest, GuestSchema } from '../guest/schemas/guest.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
-
 import { DeliveryModule } from '../delivery/delivery.module';
+import { InventoryModule } from '../inventory/inventory.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -20,6 +21,8 @@ import { DeliveryModule } from '../delivery/delivery.module';
     ]),
     LoyaltyModule, // Import LoyaltyModule để sử dụng LoyaltyService
     DeliveryModule,
+    InventoryModule, // Import InventoryModule để sử dụng InventoryService
+    NotificationModule, // Import NotificationModule để sử dụng NotificationService
   ],
   controllers: [OrderController],
   providers: [OrderService],

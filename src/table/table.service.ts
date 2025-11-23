@@ -137,12 +137,12 @@ export class TableService {
   // Cập nhật status của bàn
   async updateTableStatus(
     tableId: string,
-    status: 'available' | 'occupied' | 'reserved'
+    status: 'available' | 'occupied' | 'reserved' | 'maintenance'
   ): Promise<Table> {
     const updateData: any = { status };
 
-    // Nếu chuyển sang available, xóa currentOrder
-    if (status === 'available') {
+    // Nếu chuyển sang available hoặc maintenance, xóa currentOrder
+    if (status === 'available' || status === 'maintenance') {
       updateData.currentOrder = null;
     }
 
@@ -191,7 +191,7 @@ export class TableService {
 
   // Tìm bàn theo status
   async findByStatus(
-    status: 'available' | 'occupied' | 'reserved'
+    status: 'available' | 'occupied' | 'reserved' | 'maintenance'
   ): Promise<Table[]> {
     return this.tableModel.find({ status }).populate('currentOrder').exec();
   }

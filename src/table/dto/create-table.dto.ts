@@ -10,7 +10,7 @@ export class CreateTableDto {
   @IsOptional()
   location?: string;
 
-  @IsEnum(['available', 'occupied', 'reserved'])
+  @IsEnum(['available', 'occupied', 'reserved', 'maintenance'])
   @IsOptional()
   status?: string = 'available';
 

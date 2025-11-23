@@ -20,6 +20,10 @@ import { User } from '../user/schemas/user.schema';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { MarkOrderPaidDto } from './dto/update-order.dto';
 import { DeliveryService } from '../delivery/delivery.service';
+import { InventoryService } from '../inventory/inventory.service';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationGateway } from '../notification/notification.gateway';
+import { NotificationType } from '../notification/schemas/notification.schema';
 import {
   PaginationResponseDto,
   buildSortObject,
@@ -34,7 +38,10 @@ export class OrderService {
     @InjectModel(Guest.name) private guestModel: Model<Guest>,
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly loyaltyService: LoyaltyService,
-    private readonly deliveryService: DeliveryService
+    private readonly deliveryService: DeliveryService,
+    private readonly inventoryService: InventoryService,
+    private readonly notificationService: NotificationService,
+    private readonly notificationGateway: NotificationGateway,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
@@ -116,6 +123,22 @@ export class OrderService {
         .exec();
     }
 
+    // Note: Inventory stock will be deducted when order status changes to SERVED
+    // This prevents stock issues if order is cancelled before being served
+
+    // Send notification to admins/staff about new order
+    try {
+      const notification = await this.notificationService.createOrderNotification(
+        NotificationType.ORDER_NEW,
+        savedOrder._id.toString(),
+        undefined,
+        guest,
+      );
+      await this.notificationGateway.sendToAdmins(notification);
+    } catch (error) {
+      console.error('Error sending order notification:', error);
+    }
+
     return savedOrder;
   }
 
@@ -194,6 +217,22 @@ export class OrderService {
         customerPhone,
         deliveryAddress: deliveryAddress!,
       });
+    }
+
+    // Note: Inventory stock will be deducted when order status changes to SERVED
+    // This prevents stock issues if order is cancelled before being served
+
+    // Send notification to admins/staff about new order
+    try {
+      const notification = await this.notificationService.createOrderNotification(
+        NotificationType.ORDER_NEW,
+        savedOrder._id.toString(),
+        user,
+        undefined,
+      );
+      await this.notificationGateway.sendToAdmins(notification);
+    } catch (error) {
+      console.error('Error sending order notification:', error);
     }
 
     return savedOrder;
@@ -327,6 +366,15 @@ export class OrderService {
       throw new BadRequestException('Invalid order status');
     }
 
+    // Get current order to check previous status
+    const existingOrder = await this.orderModel.findById(id).exec();
+    if (!existingOrder) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const previousStatus = existingOrder.status;
+
+    // Update order status
     const order = await this.orderModel
       .findByIdAndUpdate(id, { status }, { new: true })
       .populate('items.item', 'name price category images')
@@ -338,6 +386,40 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
+    // Process inventory stock when order is SERVED
+    if (status === OrderStatus.SERVED && previousStatus !== OrderStatus.SERVED) {
+      try {
+        const orderItems = order.items.map((item: any) => ({
+          item: item.item._id?.toString() || item.item.toString(),
+          quantity: item.quantity,
+        }));
+        await this.inventoryService.processOrderStock(orderItems);
+        console.log(`✅ Inventory stock deducted for order ${id}`);
+      } catch (error: any) {
+        console.error('❌ Error processing inventory stock:', error);
+        // Revert status if inventory processing fails
+        await this.orderModel.findByIdAndUpdate(id, { status: previousStatus }).exec();
+        throw new BadRequestException(
+          error?.message || 'Failed to process inventory stock. Order status reverted.'
+        );
+      }
+    }
+
+    // Restore inventory stock if order is CANCELLED after being SERVED
+    if (status === OrderStatus.CANCELLED && previousStatus === OrderStatus.SERVED) {
+      try {
+        const orderItems = order.items.map((item: any) => ({
+          item: item.item._id?.toString() || item.item.toString(),
+          quantity: item.quantity,
+        }));
+        await this.inventoryService.restoreOrderStock(orderItems);
+        console.log(`✅ Inventory stock restored for cancelled order ${id}`);
+      } catch (error: any) {
+        console.error('❌ Error restoring inventory stock:', error);
+        // Log error but don't fail the cancellation
+      }
+    }
+
     // Tự động cộng điểm loyalty khi đơn hàng hoàn thành (served)
     if (status === OrderStatus.SERVED && order.user) {
       try {
@@ -347,7 +429,35 @@ export class OrderService {
         );
       } catch (error) {
         // Log error nhưng không throw để không ảnh hưởng đến việc cập nhật status
-        throw new BadRequestException('Lỗi khi cộng điểm loyalty:');
+        console.error('Error adding loyalty points:', error);
+      }
+    }
+
+    // Send notification to customer about status change
+    if (previousStatus !== status) {
+      try {
+        const userId = order.user?.toString();
+        const guestId = order.guest?.toString();
+        const notificationType = status === OrderStatus.CANCELLED 
+          ? NotificationType.ORDER_CANCELLED 
+          : NotificationType.ORDER_STATUS_CHANGED;
+        
+        const notification = await this.notificationService.createOrderNotification(
+          notificationType,
+          order._id.toString(),
+          userId,
+          guestId,
+          status,
+        );
+
+        // Send to customer
+        if (userId) {
+          await this.notificationGateway.sendToUser(userId, notification);
+        } else if (guestId) {
+          await this.notificationGateway.sendToGuest(guestId, notification);
+        }
+      } catch (error) {
+        console.error('Error sending status change notification:', error);
       }
     }
 

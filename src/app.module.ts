@@ -26,6 +26,10 @@ import { DeliveryModule } from './delivery/delivery.module';
 import { VoucherModule } from './voucher/voucher.module';
 import { RestaurantModule } from './restaurant/restaurant.module';
 import { ZoneModule } from './zone/zone.module';
+import { TableLayoutModule } from './table-layout/table-layout.module';
+import { ReviewModule } from './review/review.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -66,6 +70,10 @@ import { ZoneModule } from './zone/zone.module';
     VoucherModule,
     RestaurantModule,
     ZoneModule,
+    TableLayoutModule,
+    ReviewModule,
+    InventoryModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [

@@ -25,7 +25,7 @@ import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { IUser } from 'src/user/user.interface';
-import { ParseFilesPipe } from 'src/file/upload.validator';
+import { ParseFilesPipe } from '../file/upload.validator';
 import { PermissionGuard } from 'src/permission/permission.guard';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 

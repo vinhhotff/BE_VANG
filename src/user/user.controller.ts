@@ -22,7 +22,7 @@ import {
 } from 'src/auth/decoration/setMetadata';
 import { IUser } from './user.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ParseFilesPipe } from 'src/file/upload.validator';
+import { ParseFilesPipe } from '../file/upload.validator';
 import { PaginationResult, SearchUserDto } from './dto/user.dto';
 import { PaginationResponseDto } from '../common/dto/pagination.dto';
 

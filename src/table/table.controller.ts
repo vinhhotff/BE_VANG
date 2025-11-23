@@ -37,7 +37,7 @@ export class TableController {
 
   @Permission('table:findByStatus')
   @Get('status/:status')
-  findByStatus(@Param('status') status: 'available' | 'occupied' | 'reserved') {
+  findByStatus(@Param('status') status: 'available' | 'occupied' | 'reserved' | 'maintenance') {
     return this.tableService.findByStatus(status);
   }
 

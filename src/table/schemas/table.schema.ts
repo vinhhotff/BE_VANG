@@ -13,7 +13,7 @@ export class Table {
   @Prop({ required: false })
   location?: string;
 
-  @Prop({ required: true, enum: ['available', 'occupied', 'reserved'] })
+  @Prop({ required: true, enum: ['available', 'occupied', 'reserved', 'maintenance'] })
   status: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Order', default: null })
