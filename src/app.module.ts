@@ -30,9 +30,11 @@ import { TableLayoutModule } from './table-layout/table-layout.module';
 import { ReviewModule } from './review/review.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { NotificationModule } from './notification/notification.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -84,4 +86,4 @@ import { NotificationModule } from './notification/notification.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }
