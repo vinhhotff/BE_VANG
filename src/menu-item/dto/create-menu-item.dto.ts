@@ -68,4 +68,16 @@ export class CreateMenuItemDto {
   })
   @IsBoolean()
   isVegan?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    // Allow null for unlimited stock, or parse number
+    if (value === null || value === 'null' || value === '') {
+      return null;
+    }
+    return Number(value);
+  })
+  @IsNumber()
+  @Min(0)
+  stock?: number | null;
 }
