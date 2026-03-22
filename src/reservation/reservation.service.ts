@@ -575,6 +575,23 @@ export class ReservationService {
     reservation.depositPaidAt = new Date();
     reservation.status = ReservationStatus.CONFIRMED;
 
+    // Confirm inventory reservations (move from pending to confirmed)
+    if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+      const dateStr = reservation.usageDate.toISOString().split('T')[0];
+      for (const item of reservation.items) {
+        try {
+          await this.inventoryService.confirmReservation(
+            item.item.toString(),
+            dateStr,
+            item.quantity
+          );
+        } catch (error) {
+          console.error('Failed to confirm inventory reservation:', error);
+          // Continue with deposit confirmation even if inventory confirmation fails
+        }
+      }
+    }
+
     return reservation.save();
   }
 
@@ -814,10 +831,12 @@ export class ReservationService {
 
   /**
    * Auto-expire pending approvals (called by cron job)
+   * Also releases inventory reservations
    */
   async autoExpirePendingApprovals(): Promise<{
     expired: number;
     notifications: number;
+    inventoryReleased: number;
   }> {
     const now = new Date();
 
@@ -829,8 +848,27 @@ export class ReservationService {
     }).exec();
 
     let notifications = 0;
+    let inventoryReleased = 0;
 
     for (const reservation of expiredReservations) {
+      // Release inventory first
+      if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+        const dateStr = reservation.usageDate.toISOString().split('T')[0];
+        for (const item of reservation.items) {
+          try {
+            await this.inventoryService.releaseInventory(
+              item.item.toString(),
+              dateStr,
+              item.quantity,
+              reservation._id.toString()
+            );
+            inventoryReleased++;
+          } catch (error) {
+            console.error('Failed to release inventory:', error);
+          }
+        }
+      }
+
       // Update status
       reservation.approvalStatus = ApprovalStatus.EXPIRED;
       reservation.status = ReservationStatus.CANCELLED;
@@ -855,6 +893,59 @@ export class ReservationService {
     return {
       expired: expiredReservations.length,
       notifications,
+      inventoryReleased,
+    };
+  }
+
+  /**
+   * Auto-expire pending reservations (not yet approved) that have been waiting too long
+   * This releases inventory back for other customers
+   */
+  async autoExpirePendingReservations(maxPendingHours: number = 24): Promise<{
+    expired: number;
+    inventoryReleased: number;
+  }> {
+    const cutoffTime = new Date();
+    cutoffTime.setHours(cutoffTime.getHours() - maxPendingHours);
+
+    // Find pending reservations older than cutoff that were never approved
+    const expiredReservations = await this.reservationModel.find({
+      status: ReservationStatus.PENDING, // Regular pending, not confirmed
+      isDepositPaid: false,
+      createdAt: { $lte: cutoffTime },
+      approvalStatus: { $ne: ApprovalStatus.APPROVED }, // Not approved
+    }).exec();
+
+    let inventoryReleased = 0;
+
+    for (const reservation of expiredReservations) {
+      // Release inventory
+      if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+        const dateStr = reservation.usageDate.toISOString().split('T')[0];
+        for (const item of reservation.items) {
+          try {
+            await this.inventoryService.releaseInventory(
+              item.item.toString(),
+              dateStr,
+              item.quantity,
+              reservation._id.toString()
+            );
+            inventoryReleased++;
+          } catch (error) {
+            console.error('Failed to release inventory:', error);
+          }
+        }
+      }
+
+      // Cancel the reservation
+      reservation.status = ReservationStatus.CANCELLED;
+      reservation.approvalStatus = ApprovalStatus.EXPIRED;
+      await reservation.save();
+    }
+
+    return {
+      expired: expiredReservations.length,
+      inventoryReleased,
     };
   }
 

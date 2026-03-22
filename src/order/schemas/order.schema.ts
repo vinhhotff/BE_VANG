@@ -38,10 +38,17 @@ export class Order extends Document {
 
   @Prop({
     type: String,
-    enum: ['pending', 'preparing', 'served', 'cancelled'],
+    enum: {
+      pending: 'pending',
+      pending_approval: 'pending_approval',
+      confirmed: 'confirmed',
+      preparing: 'preparing',
+      served: 'served',
+      cancelled: 'cancelled',
+    },
     default: 'pending',
   })
-  status: 'pending' | 'preparing' | 'served' | 'cancelled';
+  status: 'pending' | 'pending_approval' | 'confirmed' | 'preparing' | 'served' | 'cancelled';
 
   @Prop({ required: true, min: 0 })
   totalPrice: number; // Tổng tiền của order
@@ -73,13 +80,13 @@ export class Order extends Document {
 
   @Prop({ type: Object })
   createdBy?: {
-    _id: mongoose.Schema.Types.ObjectId;
+    _id: Types.ObjectId;
     email: string;
   };
 
   @Prop({ type: Object })
   updatedBy?: {
-    _id: mongoose.Schema.Types.ObjectId;
+    _id: Types.ObjectId;
     email: string;
   };
 

@@ -400,114 +400,208 @@ export class InventoryService {
 
   /**
    * Reserve inventory for a specific date (pending - not confirmed yet)
+   * Uses atomic operation to prevent race conditions
    */
   async reserveInventory(menuItemId: string, date: string, quantity: number, orderId?: string): Promise<DailyInventoryReservation> {
-    // Check availability first
-    const availability = await this.checkAvailability(menuItemId, date, quantity);
-    if (!availability.available) {
-      throw new BadRequestException(availability.message);
-    }
-
     const dateOnly = this.getDateOnly(date);
-    
-    // Get or create daily reservation record
-    let reservation = await this.dailyReservationModel.findOne({
-      menuItem: menuItemId,
-      date: dateOnly,
-    }).exec();
 
-    if (!reservation) {
-      const menuItem = await this.menuItemModel.findById(menuItemId).exec();
-      reservation = new this.dailyReservationModel({
-        menuItem: menuItemId,
-        date: dateOnly,
-        dailyLimit: menuItem?.dailyLimit || 0,
-        totalReserved: 0,
-        confirmedCount: 0,
-        pendingCount: 0,
-      });
+    // Get menu item to check daily limit
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    if (!menuItem) {
+      throw new NotFoundException(`Menu item with ID ${menuItemId} not found`);
     }
 
-    // Add to pending count
-    reservation.pendingCount += quantity;
-    reservation.totalReserved += quantity;
-    
-    return reservation.save();
+    const dailyLimit = menuItem.dailyLimit || 0;
+
+    // Use atomic operation with conditional update to prevent race conditions
+    // The query ensures we don't exceed the daily limit
+    let reservation: DailyInventoryReservation | null = null;
+
+    if (dailyLimit > 0) {
+      // Try to reserve using atomic operation (only succeeds if within limit)
+      reservation = await this.dailyReservationModel.findOneAndUpdate(
+        {
+          menuItem: menuItemId,
+          date: dateOnly,
+          // Only update if totalReserved + quantity <= dailyLimit
+          $expr: { $lte: [{ $add: ['$totalReserved', quantity] }, dailyLimit] },
+        },
+        {
+          $inc: {
+            pendingCount: quantity,
+            totalReserved: quantity,
+          },
+        },
+        { new: true }
+      ).exec();
+
+      if (!reservation) {
+        // Either no record exists or limit exceeded - check current status
+        const existing = await this.dailyReservationModel.findOne({
+          menuItem: menuItemId,
+          date: dateOnly,
+        }).exec();
+
+        if (existing) {
+          const available = dailyLimit - existing.totalReserved;
+          throw new BadRequestException(
+            `Chỉ còn ${available} phần có sẵn cho ngày này. Bạn đã yêu cầu ${quantity} phần.`
+          );
+        }
+      }
+    }
+
+    // If no reservation found (no daily limit or record doesn't exist)
+    if (!reservation) {
+      reservation = await this.dailyReservationModel.findOneAndUpdate(
+        {
+          menuItem: menuItemId,
+          date: dateOnly,
+        },
+        {
+          $inc: {
+            pendingCount: quantity,
+            totalReserved: quantity,
+          },
+          $setOnInsert: {
+            dailyLimit: dailyLimit,
+          },
+        },
+        {
+          new: true,
+          upsert: true, // Create if doesn't exist
+        }
+      ).exec();
+    }
+
+    return reservation!;
   }
 
   /**
-   * Release pending inventory reservation
+   * Release pending inventory reservation (atomic operation)
    */
   async releaseInventory(menuItemId: string, date: string, quantity: number, orderId?: string): Promise<DailyInventoryReservation> {
     const dateOnly = this.getDateOnly(date);
-    
-    const reservation = await this.dailyReservationModel.findOne({
-      menuItem: menuItemId,
-      date: dateOnly,
-    }).exec();
+
+    // Use atomic operation to prevent race conditions
+    const reservation = await this.dailyReservationModel.findOneAndUpdate(
+      {
+        menuItem: menuItemId,
+        date: dateOnly,
+        // Only update if pendingCount >= quantity
+        pendingCount: { $gte: quantity },
+      },
+      {
+        $inc: {
+          pendingCount: -quantity,
+          totalReserved: -quantity,
+        },
+      },
+      { new: true }
+    ).exec();
 
     if (!reservation) {
-      throw new NotFoundException(`No reservation found for this menu item on this date`);
+      const existing = await this.dailyReservationModel.findOne({
+        menuItem: menuItemId,
+        date: dateOnly,
+      }).exec();
+
+      if (!existing) {
+        throw new NotFoundException(`No reservation found for this menu item on this date`);
+      }
+
+      if (existing.pendingCount < quantity) {
+        throw new BadRequestException(
+          `Cannot release ${quantity}. Only ${existing.pendingCount} pending reservations available.`
+        );
+      }
     }
 
-    if (reservation.pendingCount < quantity) {
-      throw new BadRequestException('Cannot release more than pending count');
-    }
-
-    reservation.pendingCount -= quantity;
-    reservation.totalReserved -= quantity;
-    
-    return reservation.save();
+    return reservation!;
   }
 
   /**
-   * Confirm reservation (when payment is confirmed)
+   * Confirm reservation (when payment is confirmed) - atomic operation
    */
   async confirmReservation(menuItemId: string, date: string, quantity: number): Promise<DailyInventoryReservation> {
     const dateOnly = this.getDateOnly(date);
-    
-    const reservation = await this.dailyReservationModel.findOne({
-      menuItem: menuItemId,
-      date: dateOnly,
-    }).exec();
+
+    // Use atomic operation
+    const reservation = await this.dailyReservationModel.findOneAndUpdate(
+      {
+        menuItem: menuItemId,
+        date: dateOnly,
+        pendingCount: { $gte: quantity },
+      },
+      {
+        $inc: {
+          pendingCount: -quantity,
+          confirmedCount: quantity,
+        },
+      },
+      { new: true }
+    ).exec();
 
     if (!reservation) {
-      throw new NotFoundException(`No reservation found for this menu item on this date`);
+      const existing = await this.dailyReservationModel.findOne({
+        menuItem: menuItemId,
+        date: dateOnly,
+      }).exec();
+
+      if (!existing) {
+        throw new NotFoundException(`No reservation found for this menu item on this date`);
+      }
+
+      if (existing.pendingCount < quantity) {
+        throw new BadRequestException(
+          `Cannot confirm ${quantity}. Only ${existing.pendingCount} pending reservations available.`
+        );
+      }
     }
 
-    if (reservation.pendingCount < quantity) {
-      throw new BadRequestException('Cannot confirm more than pending count');
-    }
-
-    reservation.pendingCount -= quantity;
-    reservation.confirmedCount += quantity;
-    
-    return reservation.save();
+    return reservation!;
   }
 
   /**
-   * Cancel confirmed reservation (when order is cancelled)
+   * Cancel confirmed reservation (when order is cancelled) - atomic operation
    */
   async cancelConfirmedReservation(menuItemId: string, date: string, quantity: number): Promise<DailyInventoryReservation> {
     const dateOnly = this.getDateOnly(date);
-    
-    const reservation = await this.dailyReservationModel.findOne({
-      menuItem: menuItemId,
-      date: dateOnly,
-    }).exec();
+
+    // Use atomic operation
+    const reservation = await this.dailyReservationModel.findOneAndUpdate(
+      {
+        menuItem: menuItemId,
+        date: dateOnly,
+        confirmedCount: { $gte: quantity },
+      },
+      {
+        $inc: {
+          confirmedCount: -quantity,
+          totalReserved: -quantity,
+        },
+      },
+      { new: true }
+    ).exec();
 
     if (!reservation) {
-      throw new NotFoundException(`No reservation found for this menu item on this date`);
+      const existing = await this.dailyReservationModel.findOne({
+        menuItem: menuItemId,
+        date: dateOnly,
+      }).exec();
+
+      if (!existing) {
+        throw new NotFoundException(`No reservation found for this menu item on this date`);
+      }
+
+      if (existing.confirmedCount < quantity) {
+        throw new BadRequestException(
+          `Cannot cancel ${quantity}. Only ${existing.confirmedCount} confirmed reservations available.`
+        );
+      }
     }
 
-    if (reservation.confirmedCount < quantity) {
-      throw new BadRequestException('Cannot cancel more than confirmed count');
-    }
-
-    reservation.confirmedCount -= quantity;
-    reservation.totalReserved -= quantity;
-    
-    return reservation.save();
+    return reservation!;
   }
 
   /**

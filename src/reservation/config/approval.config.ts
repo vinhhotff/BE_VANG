@@ -7,8 +7,8 @@ export const BULK_ORDER_CONFIG = {
   // Thời gian hết hạn
   AUTO_EXPIRE_HOURS: 48,      // Tự động hủy sau 48h không duyệt
   NOTIFICATION_BEFORE_EXPIRE_HOURS: 24, // Thông báo trước khi hết hạn
-  // Các món đặc biệt luôn cần phê duyệt (bất kể số lượng)
-  SPECIAL_ITEM_AUTO_APPROVE_MIN_QUANTITY: 10, // Món đặc biệt < 10 cái thì không cần phê duyệt
+  // Các món đặc biệt luôn cần phê duyệt khi vượt ngưỡng này
+  SPECIAL_ITEM_THRESHOLD: 10, // Món đặc biệt >= 10 cái thì cần phê duyệt
 };
 
 export class ApprovalConfig {
@@ -47,12 +47,12 @@ export class ApprovalConfig {
   requiresApproval(totalItems: number, totalValue: number, hasSpecialItems: boolean = false): boolean {
     const { MIN_ITEMS, MIN_VALUE } = this.config.THRESHOLD;
 
-    // Nếu có món đặc biệt với số lượng lớn
-    if (hasSpecialItems && totalItems >= this.config.SPECIAL_ITEM_AUTO_APPROVE_MIN_QUANTITY) {
+    // Nếu có món đặc biệt với số lượng lớn (>= threshold) → cần phê duyệt
+    if (hasSpecialItems && totalItems >= this.config.SPECIAL_ITEM_THRESHOLD) {
       return true;
     }
 
-    // Kiểm tra ngưỡng thông thường
+    // Kiểm tra ngưỡng thông thường: >= 20 items HOẶC >= 5M VND
     return totalItems >= MIN_ITEMS || totalValue >= MIN_VALUE;
   }
 
