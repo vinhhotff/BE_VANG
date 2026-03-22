@@ -8,10 +8,13 @@ import { Model, Types } from 'mongoose';
 import { Ingredient, IngredientDocument } from './schemas/ingredient.schema';
 import { StockMovement, StockMovementDocument, MovementType, MovementReason } from './schemas/stock-movement.schema';
 import { MenuItemIngredient, MenuItemIngredientDocument } from './schemas/menu-item-ingredient.schema';
+import { DailyInventoryReservation, DailyInventoryReservationDocument } from './schemas/daily-inventory-reservation.schema';
 import { CreateIngredientDto, UpdateIngredientDto } from './dto/create-ingredient.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { CreateMenuItemIngredientDto, UpdateMenuItemIngredientDto } from './dto/create-menu-item-ingredient.dto';
 import { IUser } from '../user/user.interface';
+import { CheckInventoryAvailabilityDto, ReserveInventoryDto, ReleaseInventoryDto, BulkReserveInventoryDto } from './dto/inventory-check.dto';
+import { MenuItem } from '../menu-item/schemas/menu-item.schema';
 
 @Injectable()
 export class InventoryService {
@@ -19,6 +22,8 @@ export class InventoryService {
     @InjectModel(Ingredient.name) private ingredientModel: Model<IngredientDocument>,
     @InjectModel(StockMovement.name) private stockMovementModel: Model<StockMovementDocument>,
     @InjectModel(MenuItemIngredient.name) private menuItemIngredientModel: Model<MenuItemIngredientDocument>,
+    @InjectModel(DailyInventoryReservation.name) private dailyReservationModel: Model<DailyInventoryReservationDocument>,
+    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
   ) {}
 
   // ========== Ingredient Methods ==========
@@ -273,6 +278,346 @@ export class InventoryService {
     );
 
     return { lowStock, outOfStock };
+  }
+
+  // ========== D-Day Inventory Management ==========
+  
+  /**
+   * Helper function to get date-only (without time)
+   */
+  private getDateOnly(date: Date | string): Date {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  /**
+   * Check if requested quantity is available for a specific date
+   */
+  async checkAvailability(menuItemId: string, date: string, quantity: number): Promise<{
+    available: boolean;
+    availableQuantity: number;
+    dailyLimit: number | null;
+    totalReserved: number;
+    message: string;
+  }> {
+    // Get menu item
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    if (!menuItem) {
+      throw new NotFoundException(`Menu item with ID ${menuItemId} not found`);
+    }
+
+    const dailyLimit = menuItem.dailyLimit;
+    
+    // If no daily limit, it's unlimited
+    if (!dailyLimit) {
+      return {
+        available: true,
+        availableQuantity: Infinity,
+        dailyLimit: null,
+        totalReserved: 0,
+        message: 'Unlimited quantity available',
+      };
+    }
+
+    // Get or create daily reservation record
+    const dateOnly = this.getDateOnly(date);
+    let reservation = await this.dailyReservationModel.findOne({
+      menuItem: menuItemId,
+      date: dateOnly,
+    }).exec();
+
+    if (!reservation) {
+      // Create new reservation record
+      reservation = new this.dailyReservationModel({
+        menuItem: menuItemId,
+        date: dateOnly,
+        dailyLimit: dailyLimit,
+        totalReserved: 0,
+        confirmedCount: 0,
+        pendingCount: 0,
+      });
+      await reservation.save();
+    }
+
+    const totalReserved = reservation.totalReserved;
+    const availableQuantity = dailyLimit - totalReserved;
+
+    if (quantity > availableQuantity) {
+      return {
+        available: false,
+        availableQuantity,
+        dailyLimit,
+        totalReserved,
+        message: `Chỉ còn ${availableQuantity} phần có sẵn cho ngày này. Bạn đã yêu cầu ${quantity} phần.`,
+      };
+    }
+
+    return {
+      available: true,
+      availableQuantity,
+      dailyLimit,
+      totalReserved,
+      message: `Còn ${availableQuantity} phần có sẵn`,
+    };
+  }
+
+  /**
+   * Check availability for multiple items
+   */
+  async checkMultipleItemsAvailability(items: Array<{ menuItemId: string; date: string; quantity: number }>): Promise<{
+    allAvailable: boolean;
+    results: Array<{
+      menuItemId: string;
+      available: boolean;
+      availableQuantity: number;
+      dailyLimit: number | null;
+      message: string;
+    }>;
+  }> {
+    const results: Array<{
+      menuItemId: string;
+      available: boolean;
+      availableQuantity: number;
+      dailyLimit: number | null;
+      message: string;
+    }> = [];
+    let allAvailable = true;
+
+    for (const item of items) {
+      const result = await this.checkAvailability(item.menuItemId, item.date, item.quantity);
+      results.push({
+        menuItemId: item.menuItemId,
+        ...result,
+      });
+      if (!result.available) {
+        allAvailable = false;
+      }
+    }
+
+    return { allAvailable, results };
+  }
+
+  /**
+   * Reserve inventory for a specific date (pending - not confirmed yet)
+   */
+  async reserveInventory(menuItemId: string, date: string, quantity: number, orderId?: string): Promise<DailyInventoryReservation> {
+    // Check availability first
+    const availability = await this.checkAvailability(menuItemId, date, quantity);
+    if (!availability.available) {
+      throw new BadRequestException(availability.message);
+    }
+
+    const dateOnly = this.getDateOnly(date);
+    
+    // Get or create daily reservation record
+    let reservation = await this.dailyReservationModel.findOne({
+      menuItem: menuItemId,
+      date: dateOnly,
+    }).exec();
+
+    if (!reservation) {
+      const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+      reservation = new this.dailyReservationModel({
+        menuItem: menuItemId,
+        date: dateOnly,
+        dailyLimit: menuItem?.dailyLimit || 0,
+        totalReserved: 0,
+        confirmedCount: 0,
+        pendingCount: 0,
+      });
+    }
+
+    // Add to pending count
+    reservation.pendingCount += quantity;
+    reservation.totalReserved += quantity;
+    
+    return reservation.save();
+  }
+
+  /**
+   * Release pending inventory reservation
+   */
+  async releaseInventory(menuItemId: string, date: string, quantity: number, orderId?: string): Promise<DailyInventoryReservation> {
+    const dateOnly = this.getDateOnly(date);
+    
+    const reservation = await this.dailyReservationModel.findOne({
+      menuItem: menuItemId,
+      date: dateOnly,
+    }).exec();
+
+    if (!reservation) {
+      throw new NotFoundException(`No reservation found for this menu item on this date`);
+    }
+
+    if (reservation.pendingCount < quantity) {
+      throw new BadRequestException('Cannot release more than pending count');
+    }
+
+    reservation.pendingCount -= quantity;
+    reservation.totalReserved -= quantity;
+    
+    return reservation.save();
+  }
+
+  /**
+   * Confirm reservation (when payment is confirmed)
+   */
+  async confirmReservation(menuItemId: string, date: string, quantity: number): Promise<DailyInventoryReservation> {
+    const dateOnly = this.getDateOnly(date);
+    
+    const reservation = await this.dailyReservationModel.findOne({
+      menuItem: menuItemId,
+      date: dateOnly,
+    }).exec();
+
+    if (!reservation) {
+      throw new NotFoundException(`No reservation found for this menu item on this date`);
+    }
+
+    if (reservation.pendingCount < quantity) {
+      throw new BadRequestException('Cannot confirm more than pending count');
+    }
+
+    reservation.pendingCount -= quantity;
+    reservation.confirmedCount += quantity;
+    
+    return reservation.save();
+  }
+
+  /**
+   * Cancel confirmed reservation (when order is cancelled)
+   */
+  async cancelConfirmedReservation(menuItemId: string, date: string, quantity: number): Promise<DailyInventoryReservation> {
+    const dateOnly = this.getDateOnly(date);
+    
+    const reservation = await this.dailyReservationModel.findOne({
+      menuItem: menuItemId,
+      date: dateOnly,
+    }).exec();
+
+    if (!reservation) {
+      throw new NotFoundException(`No reservation found for this menu item on this date`);
+    }
+
+    if (reservation.confirmedCount < quantity) {
+      throw new BadRequestException('Cannot cancel more than confirmed count');
+    }
+
+    reservation.confirmedCount -= quantity;
+    reservation.totalReserved -= quantity;
+    
+    return reservation.save();
+  }
+
+  /**
+   * Bulk reserve inventory for multiple items
+   */
+  async bulkReserveInventory(items: Array<{ menuItemId: string; quantity: number }>, date: string, orderId?: string): Promise<{
+    success: boolean;
+    results: Array<{
+      menuItemId: string;
+      success: boolean;
+      message: string;
+    }>;
+  }> {
+    const results: Array<{ menuItemId: string; success: boolean; message: string }> = [];
+    let allSuccess = true;
+
+    for (const item of items) {
+      try {
+        await this.reserveInventory(item.menuItemId, date, item.quantity, orderId);
+        results.push({
+          menuItemId: item.menuItemId,
+          success: true,
+          message: 'Reserved successfully',
+        });
+      } catch (error: any) {
+        allSuccess = false;
+        results.push({
+          menuItemId: item.menuItemId,
+          success: false,
+          message: error.message,
+        });
+        
+        // Rollback previous reservations if any failed
+        for (let i = 0; i < results.length - 1; i++) {
+          if (results[i].success) {
+            const itemToRelease = items[i];
+            await this.releaseInventory(itemToRelease.menuItemId, date, itemToRelease.quantity, orderId);
+          }
+        }
+        break;
+      }
+    }
+
+    return { success: allSuccess, results };
+  }
+
+  /**
+   * Get available quantity for a specific date
+   */
+  async getAvailableQuantity(menuItemId: string, date: string): Promise<number> {
+    const availability = await this.checkAvailability(menuItemId, date, 1);
+    return availability.availableQuantity;
+  }
+
+  /**
+   * Get daily reservation info for a menu item
+   */
+  async getDailyReservationInfo(menuItemId: string, date: string): Promise<{
+    date: Date;
+    dailyLimit: number | null;
+    totalReserved: number;
+    confirmedCount: number;
+    pendingCount: number;
+    availableQuantity: number;
+  }> {
+    const dateOnly = this.getDateOnly(date);
+    
+    let reservation = await this.dailyReservationModel.findOne({
+      menuItem: menuItemId,
+      date: dateOnly,
+    }).exec();
+
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    const dailyLimit = menuItem?.dailyLimit || null;
+
+    if (!reservation) {
+      return {
+        date: dateOnly,
+        dailyLimit,
+        totalReserved: 0,
+        confirmedCount: 0,
+        pendingCount: 0,
+        availableQuantity: dailyLimit || Infinity,
+      };
+    }
+
+    return {
+      date: reservation.date,
+      dailyLimit: reservation.dailyLimit,
+      totalReserved: reservation.totalReserved,
+      confirmedCount: reservation.confirmedCount,
+      pendingCount: reservation.pendingCount,
+      availableQuantity: (reservation.dailyLimit || Infinity) - reservation.totalReserved,
+    };
+  }
+
+  /**
+   * Get all reservations for a date range
+   */
+  async getReservationsInRange(startDate: string, endDate: string): Promise<DailyInventoryReservation[]> {
+    const start = this.getDateOnly(startDate);
+    const end = this.getDateOnly(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    return this.dailyReservationModel.find({
+      date: { $gte: start, $lte: end },
+    })
+    .populate('menuItem', 'name price category dailyLimit')
+    .sort({ date: 1 })
+    .exec();
   }
 }
 

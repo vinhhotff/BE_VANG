@@ -3,12 +3,20 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ReservationService } from './reservation.service';
 import { ReservationController } from './reservation.controller';
 import { Reservation, ReservationSchema } from './schemas/reservation.schema';
+import { Table, TableSchema } from '../table/schemas/table.schema';
+import { MenuItem, MenuItemSchema } from '../menu-item/schemas/menu-item.schema';
+import { InventoryModule } from '../inventory/inventory.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Reservation.name, schema: ReservationSchema },
+      { name: Table.name, schema: TableSchema },
+      { name: MenuItem.name, schema: MenuItemSchema },
     ]),
+    InventoryModule,
+    NotificationModule,
   ],
   controllers: [ReservationController],
   providers: [ReservationService],

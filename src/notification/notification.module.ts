@@ -6,10 +6,14 @@ import { NotificationController } from './notification.controller';
 import { NotificationGateway } from './notification.gateway';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule } from '@nestjs/config';
+import { User, UserSchema } from '../user/schemas/user.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Notification.name, schema: NotificationSchema }]),
+    MongooseModule.forFeature([
+      { name: Notification.name, schema: NotificationSchema },
+      { name: User.name, schema: UserSchema },
+    ]),
     JwtModule,
     ConfigModule,
   ],

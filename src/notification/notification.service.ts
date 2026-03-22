@@ -7,11 +7,28 @@ import { Model, Types } from 'mongoose';
 import { Notification, NotificationDocument, NotificationType, NotificationPriority } from './schemas/notification.schema';
 import { CreateNotificationDto, UpdateNotificationDto } from './dto/create-notification.dto';
 import { IUser } from '../user/user.interface';
+import { User, UserDocument } from '../user/schemas/user.schema';
+
+interface BulkOrderNotificationData {
+  reservationId: string;
+  totalAmount?: number;
+  totalItems?: number;
+  depositAmount?: number;
+  reason?: string;
+}
+
+interface NotificationPayload {
+  type: string;
+  title: string;
+  message: string;
+  data?: BulkOrderNotificationData;
+}
 
 @Injectable()
 export class NotificationService {
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
   async create(createNotificationDto: CreateNotificationDto, createdBy?: IUser): Promise<NotificationDocument> {
@@ -214,6 +231,63 @@ export class NotificationService {
       message: messages[type],
       data: { reviewId },
       actionUrl: type === NotificationType.REVIEW_NEW ? `/admin/reviews` : undefined,
+    });
+  }
+
+  // ========== Bulk Order Approval Notifications ==========
+
+  /**
+   * Send notification to all admins about pending bulk order
+   */
+  async sendToAdmins(payload: NotificationPayload): Promise<void> {
+    // Find all admin users
+    const admins = await this.userModel.find({
+      isDeleted: { $ne: true },
+      role: { $in: ['admin', 'manager'] },
+    }).exec();
+
+    // Create notification for each admin
+    const notifications = admins.map(admin => ({
+      user: admin._id,
+      type: NotificationType.RESERVATION_NEW,
+      priority: NotificationPriority.HIGH,
+      title: payload.title,
+      message: payload.message,
+      data: payload.data,
+      actionUrl: `/admin/reservations/${payload.data?.reservationId}`,
+    }));
+
+    if (notifications.length > 0) {
+      await this.notificationModel.insertMany(notifications);
+    }
+  }
+
+  /**
+   * Send notification to a specific user by phone (guest)
+   */
+  async sendToUser(phone: string, payload: NotificationPayload): Promise<NotificationDocument | null> {
+    // Find user by phone or create guest notification
+    const user = await this.userModel.findOne({
+      phone,
+      isDeleted: { $ne: true },
+    }).exec();
+
+    const typeMap: Record<string, NotificationType> = {
+      'BULK_ORDER_PENDING': NotificationType.RESERVATION_NEW,
+      'BULK_ORDER_APPROVED': NotificationType.RESERVATION_CONFIRMED,
+      'BULK_ORDER_REJECTED': NotificationType.RESERVATION_CANCELLED,
+      'BULK_ORDER_EXPIRED': NotificationType.RESERVATION_CANCELLED,
+    };
+
+    return this.create({
+      user: user?._id,
+      guestId: user ? undefined : phone,
+      type: typeMap[payload.type] || NotificationType.RESERVATION_NEW,
+      priority: NotificationPriority.MEDIUM,
+      title: payload.title,
+      message: payload.message,
+      data: payload.data,
+      actionUrl: user ? `/admin/reservations/${payload.data?.reservationId}` : `/my-bookings/${payload.data?.reservationId}`,
     });
   }
 }

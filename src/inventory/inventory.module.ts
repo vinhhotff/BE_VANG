@@ -5,6 +5,8 @@ import { InventoryService } from './inventory.service';
 import { Ingredient, IngredientSchema } from './schemas/ingredient.schema';
 import { StockMovement, StockMovementSchema } from './schemas/stock-movement.schema';
 import { MenuItemIngredient, MenuItemIngredientSchema } from './schemas/menu-item-ingredient.schema';
+import { DailyInventoryReservation, DailyInventoryReservationSchema } from './schemas/daily-inventory-reservation.schema';
+import { MenuItem, MenuItemSchema } from '../menu-item/schemas/menu-item.schema';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { MenuItemIngredient, MenuItemIngredientSchema } from './schemas/menu-ite
       { name: Ingredient.name, schema: IngredientSchema },
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: MenuItemIngredient.name, schema: MenuItemIngredientSchema },
+      { name: DailyInventoryReservation.name, schema: DailyInventoryReservationSchema },
+      { name: MenuItem.name, schema: MenuItemSchema },
     ]),
   ],
   controllers: [InventoryController],

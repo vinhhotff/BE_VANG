@@ -12,6 +12,7 @@ import { InventoryService } from './inventory.service';
 import { CreateIngredientDto, UpdateIngredientDto } from './dto/create-ingredient.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { CreateMenuItemIngredientDto, UpdateMenuItemIngredientDto } from './dto/create-menu-item-ingredient.dto';
+import { CheckInventoryAvailabilityDto, ReserveInventoryDto, ReleaseInventoryDto, BulkReserveInventoryDto, CheckMultipleItemsAvailabilityDto } from './dto/inventory-check.dto';
 import { Permission, User } from '../auth/decoration/setMetadata';
 import { IUser } from '../user/user.interface';
 
@@ -110,6 +111,109 @@ export class InventoryController {
   @Delete('menu-item-ingredients/:id')
   removeMenuItemIngredient(@Param('id') id: string) {
     return this.inventoryService.removeMenuItemIngredient(id);
+  }
+
+  // ========== D-Day Inventory Management Endpoints ==========
+
+  /**
+   * Check availability for a single menu item on a specific date
+   */
+  @Get('check-availability')
+  checkAvailability(
+    @Query('menuItemId') menuItemId: string,
+    @Query('date') date: string,
+    @Query('quantity') quantity: string,
+  ) {
+    return this.inventoryService.checkAvailability(menuItemId, date, +quantity);
+  }
+
+  /**
+   * Check availability for multiple items
+   */
+  @Post('check-multiple-availability')
+  checkMultipleItemsAvailability(@Body() dto: CheckMultipleItemsAvailabilityDto) {
+    return this.inventoryService.checkMultipleItemsAvailability(dto.items);
+  }
+
+  /**
+   * Reserve inventory (pending)
+   */
+  @Post('reserve')
+  reserveInventory(@Body() dto: ReserveInventoryDto) {
+    return this.inventoryService.reserveInventory(dto.menuItemId, dto.date, dto.quantity, dto.orderId);
+  }
+
+  /**
+   * Release pending inventory reservation
+   */
+  @Post('release')
+  releaseInventory(@Body() dto: ReleaseInventoryDto) {
+    return this.inventoryService.releaseInventory(dto.menuItemId, dto.date, dto.quantity, dto.orderId);
+  }
+
+  /**
+   * Confirm reservation (after payment)
+   */
+  @Post('confirm')
+  confirmReservation(
+    @Query('menuItemId') menuItemId: string,
+    @Query('date') date: string,
+    @Query('quantity') quantity: string,
+  ) {
+    return this.inventoryService.confirmReservation(menuItemId, date, +quantity);
+  }
+
+  /**
+   * Cancel confirmed reservation
+   */
+  @Post('cancel-confirmed')
+  cancelConfirmedReservation(
+    @Query('menuItemId') menuItemId: string,
+    @Query('date') date: string,
+    @Query('quantity') quantity: string,
+  ) {
+    return this.inventoryService.cancelConfirmedReservation(menuItemId, date, +quantity);
+  }
+
+  /**
+   * Bulk reserve inventory
+   */
+  @Post('bulk-reserve')
+  bulkReserveInventory(@Body() dto: BulkReserveInventoryDto) {
+    return this.inventoryService.bulkReserveInventory(dto.items, dto.date, dto.orderId);
+  }
+
+  /**
+   * Get available quantity for a date
+   */
+  @Get('available-quantity')
+  getAvailableQuantity(
+    @Query('menuItemId') menuItemId: string,
+    @Query('date') date: string,
+  ) {
+    return this.inventoryService.getAvailableQuantity(menuItemId, date);
+  }
+
+  /**
+   * Get daily reservation info
+   */
+  @Get('daily-reservation')
+  getDailyReservationInfo(
+    @Query('menuItemId') menuItemId: string,
+    @Query('date') date: string,
+  ) {
+    return this.inventoryService.getDailyReservationInfo(menuItemId, date);
+  }
+
+  /**
+   * Get reservations for a date range
+   */
+  @Get('reservations/range')
+  getReservationsInRange(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.inventoryService.getReservationsInRange(startDate, endDate);
   }
 }
 

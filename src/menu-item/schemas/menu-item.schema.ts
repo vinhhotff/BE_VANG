@@ -44,6 +44,16 @@ export class MenuItem {
   @Prop({ default: false })
   isVegan?: boolean;
 
+  // ========== D-Day Inventory Management ==========
+  @Prop({ type: Number, default: null })
+  dailyLimit: number; // Maximum quantity per day (null = unlimited)
+
+  @Prop({ type: Number, default: 0 })
+  reservedCount: number; // Current reserved count for today
+
+  @Prop({ type: Boolean, default: false })
+  isSpecialItem: boolean; // Flag for items requiring special approval
+
   @Prop({ type: Object })
   createdBy?: {
     _id: mongoose.Schema.Types.ObjectId;
@@ -72,7 +82,7 @@ export interface IMenuItem {
   _id: string;
   name: string;
   description?: string;
-  images?: Types.ObjectId[]; // Change to Types.ObjectId[] if you want to keep types consistent
+  images?: Types.ObjectId[];
   price: number;
   available: boolean;
   category: string;
@@ -80,6 +90,10 @@ export interface IMenuItem {
   tag?: string[];
   isVegetarian?: boolean;
   isVegan?: boolean;
+  // D-Day Inventory Management
+  dailyLimit?: number | null;
+  reservedCount?: number;
+  isSpecialItem?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

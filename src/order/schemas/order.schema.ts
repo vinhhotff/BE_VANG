@@ -83,6 +83,29 @@ export class Order extends Document {
     email: string;
   };
 
+  // ========== Bulk Order Approval Fields ==========
+  @Prop({ type: Boolean, default: false })
+  isBulkOrder: boolean; // Đánh dấu đơn hàng lớn
+
+  @Prop({ type: String, enum: ['auto', 'manual'], default: 'auto' })
+  approvalType: 'auto' | 'manual';
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  approvedBy: mongoose.Types.ObjectId;
+
+  @Prop()
+  approvedAt: Date;
+
+  @Prop()
+  approvalNote: string; // Ghi chú khi phê duyệt/từ chối
+
+  // For D-Day inventory management
+  @Prop({ type: Date })
+  reservationDate: Date; // Ngày sử dụng/đặt bàn
+
+  @Prop({ type: Boolean, default: false })
+  inventoryReserved: boolean; // Đã reserve tồn kho
+
   // Timestamps are automatically handled by Mongoose when timestamps: true
   createdAt: Date;
   updatedAt: Date;
@@ -106,7 +129,7 @@ export interface IOrder {
     unitPrice: number;
     subtotal: number;
   }[];
-  status: 'pending' | 'preparing' | 'served' | 'cancelled';
+  status: 'pending' | 'pending_approval' | 'confirmed' | 'preparing' | 'served' | 'cancelled';
   totalPrice: number;
   isPaid: boolean;
   specialInstructions?: string;
@@ -115,12 +138,23 @@ export interface IOrder {
   orderType: OrderType;
   deliveryAddress?: string;
   customerPhone?: string;
+  // Bulk Order Approval
+  isBulkOrder: boolean;
+  approvalType: 'auto' | 'manual';
+  approvedBy?: Types.ObjectId;
+  approvedAt?: Date;
+  approvalNote?: string;
+  // D-Day Inventory
+  reservationDate?: Date;
+  inventoryReserved: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export enum OrderStatus {
   PENDING = 'pending',
+  PENDING_APPROVAL = 'pending_approval', // Chờ phê duyệt cho đơn hàng lớn
+  CONFIRMED = 'confirmed', // Đã được phê duyệt
   PREPARING = 'preparing',
   SERVED = 'served',
   CANCELLED = 'cancelled',
