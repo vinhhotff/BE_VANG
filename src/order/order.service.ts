@@ -18,6 +18,7 @@ import {
 import { CreateOrderDto, CreateOnlineOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
 import { MenuItem } from '../menu-item/schemas/menu-item.schema';
+import { MenuItemService } from '../menu-item/menu-item.service';
 import { Guest } from '../guest/schemas/guest.schema';
 import { User } from '../user/schemas/user.schema';
 import { LoyaltyService } from '../loyalty/loyalty.service';
@@ -45,6 +46,7 @@ export class OrderService {
     private readonly inventoryService: InventoryService,
     private readonly notificationService: NotificationService,
     private readonly notificationGateway: NotificationGateway,
+    private readonly menuItemService: MenuItemService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto): Promise<Order> {
@@ -92,6 +94,15 @@ export class OrderService {
         throw new BadRequestException(
           `Menu item '${menuItem.name}' is not available`
         );
+      }
+
+      // Check stock availability
+      if (menuItem.stock !== null && menuItem.stock !== undefined) {
+        if (menuItem.stock < orderItem.quantity) {
+          throw new BadRequestException(
+            `Menu item '${menuItem.name}' chỉ còn ${menuItem.stock} phần, không đủ cho số lượng yêu cầu ${orderItem.quantity}`
+          );
+        }
       }
 
       const unitPrice = menuItem.price;
@@ -184,6 +195,15 @@ export class OrderService {
         throw new BadRequestException(
           `Menu item '${menuItem.name}' is not available`
         );
+      }
+
+      // Check stock availability
+      if (menuItem.stock !== null && menuItem.stock !== undefined) {
+        if (menuItem.stock < orderItem.quantity) {
+          throw new BadRequestException(
+            `Menu item '${menuItem.name}' chỉ còn ${menuItem.stock} phần, không đủ cho số lượng yêu cầu ${orderItem.quantity}`
+          );
+        }
       }
 
       const unitPrice = menuItem.price;
@@ -400,6 +420,14 @@ export class OrderService {
     // Process inventory stock when order is SERVED
     if (status === OrderStatus.SERVED && previousStatus !== OrderStatus.SERVED) {
       try {
+        // 1. Process menu item stock (deduct)
+        for (const item of order.items) {
+          const itemId = item.item._id?.toString() || item.item.toString();
+          await this.menuItemService.deductStock(itemId, item.quantity);
+        }
+        console.log(`✅ Menu item stock deducted for order ${id}`);
+
+        // 2. Process ingredient inventory stock (if linked)
         const orderItems = order.items.map((item: any) => ({
           item: item.item._id?.toString() || item.item.toString(),
           quantity: item.quantity,
@@ -407,18 +435,26 @@ export class OrderService {
         await this.inventoryService.processOrderStock(orderItems);
         console.log(`✅ Inventory stock deducted for order ${id}`);
       } catch (error: any) {
-        console.error('❌ Error processing inventory stock:', error);
-        // Revert status if inventory processing fails
+        console.error('❌ Error processing stock:', error);
+        // Revert status if stock processing fails
         await this.orderModel.findByIdAndUpdate(id, { status: previousStatus }).exec();
         throw new BadRequestException(
-          error?.message || 'Failed to process inventory stock. Order status reverted.'
+          error?.message || 'Failed to process stock. Order status reverted.'
         );
       }
     }
 
-    // Restore inventory stock if order is CANCELLED after being SERVED
+    // Restore menu item stock if order is CANCELLED after being SERVED
     if (status === OrderStatus.CANCELLED && previousStatus === OrderStatus.SERVED) {
       try {
+        // 1. Restore menu item stock
+        for (const item of order.items) {
+          const itemId = item.item._id?.toString() || item.item.toString();
+          await this.menuItemService.restoreStock(itemId, item.quantity);
+        }
+        console.log(`✅ Menu item stock restored for cancelled order ${id}`);
+
+        // 2. Restore ingredient inventory stock
         const orderItems = order.items.map((item: any) => ({
           item: item.item._id?.toString() || item.item.toString(),
           quantity: item.quantity,
@@ -426,7 +462,7 @@ export class OrderService {
         await this.inventoryService.restoreOrderStock(orderItems);
         console.log(`✅ Inventory stock restored for cancelled order ${id}`);
       } catch (error: any) {
-        console.error('❌ Error restoring inventory stock:', error);
+        console.error('❌ Error restoring stock:', error);
         // Log error but don't fail the cancellation
       }
     }

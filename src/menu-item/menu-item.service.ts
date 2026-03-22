@@ -264,4 +264,159 @@ export class MenuItemService {
 
     return await this.update(id, { images: updatedImages }, user);
   }
+
+  // ========== Stock Management ==========
+
+  /**
+   * Check if requested quantity is available
+   */
+  async checkStock(menuItemId: string, quantity: number): Promise<{
+    available: boolean;
+    currentStock: number | null;
+    requested: number;
+    message: string;
+  }> {
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    if (!menuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    // null stock = unlimited
+    if (menuItem.stock === null || menuItem.stock === undefined) {
+      return {
+        available: true,
+        currentStock: null,
+        requested: quantity,
+        message: 'Unlimited stock available',
+      };
+    }
+
+    if (menuItem.stock < quantity) {
+      return {
+        available: false,
+        currentStock: menuItem.stock,
+        requested: quantity,
+        message: `Chỉ còn ${menuItem.stock} phần có sẵn`,
+      };
+    }
+
+    return {
+      available: true,
+      currentStock: menuItem.stock,
+      requested: quantity,
+      message: `Còn ${menuItem.stock} phần có sẵn`,
+    };
+  }
+
+  /**
+   * Deduct stock when order is served
+   */
+  async deductStock(menuItemId: string, quantity: number): Promise<void> {
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    if (!menuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    // null stock = unlimited, no deduction needed
+    if (menuItem.stock === null || menuItem.stock === undefined) {
+      return;
+    }
+
+    if (menuItem.stock < quantity) {
+      throw new BadRequestException(
+        `Insufficient stock for menu item '${menuItem.name}'. Available: ${menuItem.stock}, Requested: ${quantity}`
+      );
+    }
+
+    await this.menuItemModel.findByIdAndUpdate(menuItemId, {
+      $inc: {
+        stock: -quantity,
+        soldCount: quantity,
+      },
+    });
+  }
+
+  /**
+   * Restore stock when order is cancelled
+   */
+  async restoreStock(menuItemId: string, quantity: number): Promise<void> {
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    if (!menuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    // null stock = unlimited, no restoration needed
+    if (menuItem.stock === null || menuItem.stock === undefined) {
+      return;
+    }
+
+    await this.menuItemModel.findByIdAndUpdate(menuItemId, {
+      $inc: { stock: quantity },
+    });
+  }
+
+  /**
+   * Add stock (for replenishment)
+   */
+  async addStock(menuItemId: string, quantity: number): Promise<MenuItemDocument> {
+    if (quantity <= 0) {
+      throw new BadRequestException('Quantity must be positive');
+    }
+
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    if (!menuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    const updated = await this.menuItemModel
+      .findByIdAndUpdate(
+        menuItemId,
+        { $inc: { stock: quantity } },
+        { new: true }
+      )
+      .populate('images')
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('Menu item not found');
+    }
+    return updated;
+  }
+
+  /**
+   * Get menu items with low stock
+   */
+  async getLowStockItems(): Promise<MenuItemDocument[]> {
+    return this.menuItemModel
+      .find({
+        stock: { $ne: null },
+        $expr: { $lte: ['$stock', 5] },
+      })
+      .populate('images')
+      .exec();
+  }
+
+  /**
+   * Update stock directly
+   */
+  async updateStock(menuItemId: string, newStock: number): Promise<MenuItemDocument> {
+    const menuItem = await this.menuItemModel.findById(menuItemId).exec();
+    if (!menuItem) {
+      throw new NotFoundException('Menu item not found');
+    }
+
+    if (newStock < 0) {
+      throw new BadRequestException('Stock cannot be negative');
+    }
+
+    const updated = await this.menuItemModel
+      .findByIdAndUpdate(menuItemId, { stock: newStock }, { new: true })
+      .populate('images')
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException('Menu item not found');
+    }
+    return updated;
+  }
 }

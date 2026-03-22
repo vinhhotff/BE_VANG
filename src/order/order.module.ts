@@ -10,6 +10,7 @@ import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { NotificationModule } from '../notification/notification.module';
+import { MenuItemModule } from '../menu-item/menu-item.module';
 
 @Module({
   imports: [
@@ -19,13 +20,14 @@ import { NotificationModule } from '../notification/notification.module';
       { name: Guest.name, schema: GuestSchema },
       { name: User.name, schema: UserSchema },
     ]),
-    LoyaltyModule, // Import LoyaltyModule để sử dụng LoyaltyService
+    LoyaltyModule,
     DeliveryModule,
-    InventoryModule, // Import InventoryModule để sử dụng InventoryService
-    NotificationModule, // Import NotificationModule để sử dụng NotificationService
+    InventoryModule,
+    NotificationModule,
+    MenuItemModule,
   ],
   controllers: [OrderController],
   providers: [OrderService],
-  exports: [OrderModule,MongooseModule,OrderService],
+  exports: [OrderModule, MongooseModule, OrderService],
 })
 export class OrderModule {}

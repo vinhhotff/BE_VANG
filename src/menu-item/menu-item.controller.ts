@@ -146,4 +146,36 @@ export class MenuItemController {
   ) {
     return this.menuItemService.removeImage(id, filename, req.user);
   }
+
+  // ========== Stock Management Endpoints ==========
+
+  @Public()
+  @Get(':id/stock')
+  checkStock(@Param('id') id: string, @Query('quantity') quantity: string = '1') {
+    return this.menuItemService.checkStock(id, parseInt(quantity) || 1);
+  }
+
+  @Permission('menuItem:update')
+  @Put(':id/stock')
+  updateStock(
+    @Param('id') id: string,
+    @Body('stock') stock: number
+  ) {
+    return this.menuItemService.updateStock(id, stock);
+  }
+
+  @Permission('menuItem:update')
+  @Post(':id/stock/add')
+  addStock(
+    @Param('id') id: string,
+    @Body('quantity') quantity: number
+  ) {
+    return this.menuItemService.addStock(id, quantity);
+  }
+
+  @Permission('menuItem:findOne')
+  @Get('low-stock')
+  getLowStockItems() {
+    return this.menuItemService.getLowStockItems();
+  }
 }

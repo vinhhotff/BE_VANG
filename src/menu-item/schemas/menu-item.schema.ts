@@ -44,6 +44,13 @@ export class MenuItem {
   @Prop({ default: false })
   isVegan?: boolean;
 
+  // ========== Menu Item Stock Management ==========
+  @Prop({ type: Number, default: null })
+  stock: number; // Current stock quantity (null = unlimited)
+
+  @Prop({ type: Number, default: 0 })
+  soldCount: number; // Total sold count for analytics
+
   // ========== D-Day Inventory Management ==========
   @Prop({ type: Number, default: null })
   dailyLimit: number; // Maximum quantity per day (null = unlimited)
@@ -90,10 +97,9 @@ export interface IMenuItem {
   tag?: string[];
   isVegetarian?: boolean;
   isVegan?: boolean;
-  // D-Day Inventory Management
-  dailyLimit?: number | null;
-  reservedCount?: number;
-  isSpecialItem?: boolean;
+  // Menu Item Stock Management
+  stock?: number | null;
+  soldCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
