@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Inject,
-  forwardRef,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +11,9 @@ import { ConfirmPayOSPaymentDto } from './dto/confirm-payos-payment.dto';
 import { Order, OrderDocument } from '../order/schemas/order.schema';
 import { OrderService } from '../order/order.service';
 import { OrderStatus } from '../order/schemas/order.schema';
+import { MenuItemIngredient, MenuItemIngredientDocument } from '../inventory/schemas/menu-item-ingredient.schema';
+import { Ingredient, IngredientDocument } from '../inventory/schemas/ingredient.schema';
+import { MenuItem } from '../menu-item/schemas/menu-item.schema';
 
 @Injectable()
 export class PayMentService {
@@ -28,6 +25,9 @@ export class PayMentService {
     private configService: ConfigService,
     @Inject(forwardRef(() => OrderService))
     private orderService: OrderService,
+    @InjectModel(MenuItemIngredient.name) private menuItemIngredientModel: Model<MenuItemIngredientDocument>,
+    @InjectModel(Ingredient.name) private ingredientModel: Model<IngredientDocument>,
+    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
   ) {
     const clientId = this.configService.get<string>('PAYOS_CLIENT_ID') || '';
     const apiKey = this.configService.get<string>('PAYOS_API_KEY') || '';
@@ -344,12 +344,48 @@ async getTotalRevenue(): Promise<number> {
         order.isPaid = true;
         await order.save();
 
-        // Update order status to served automatically when payment is confirmed
+        // CRITICAL: Check stock availability BEFORE marking as served
+        // If stock is insufficient, payment should NOT be confirmed
         try {
+          const orderItems = order.items.map((item: any) => ({
+            item: item.item._id?.toString() || item.item.toString(),
+            quantity: item.quantity,
+          }));
+
+          // Check availability first (without reserving)
+          for (const orderItem of orderItems) {
+            const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
+            if (!menuItem) {
+              throw new BadRequestException(`Menu item not found: ${orderItem.item}`);
+            }
+
+            const menuItemIngredients = await this.menuItemIngredientModel
+              .find({ menuItem: orderItem.item })
+              .populate('ingredient')
+              .exec();
+
+            for (const menuItemIngredient of menuItemIngredients) {
+              const ingredient = (menuItemIngredient as any).ingredient;
+              const requiredQuantity = (menuItemIngredient as any).quantity * orderItem.quantity;
+
+              if (ingredient.currentStock < requiredQuantity) {
+                throw new BadRequestException(
+                  `Insufficient stock for ingredient ${ingredient.name}. Required: ${requiredQuantity}, Available: ${ingredient.currentStock}`
+                );
+              }
+            }
+          }
+
+          // Stock is available, proceed with status update
           await this.orderService.updateStatus(order._id.toString(), OrderStatus.SERVED);
-        } catch (statusError) {
-          // Log error but don't fail the payment confirmation
-          console.error('Error updating order status to served:', statusError);
+        } catch (stockError) {
+          console.error('Stock check/update failed:', stockError);
+          // Payment was successful but we cannot serve the order
+          // DO NOT throw - payment record is already processed
+          // Log for manual intervention and refund processing
+          throw new BadRequestException(
+            `Payment successful but order cannot be served due to stock issues: ${stockError.message}. Please contact support for refund.`
+          );
         }
 
         // Create payment record

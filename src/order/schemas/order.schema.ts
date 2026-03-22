@@ -9,6 +9,47 @@ export enum OrderType {
   PICKUP = 'PICKUP',
 }
 
+export enum OrderStatus {
+  PENDING = 'pending',
+  PENDING_APPROVAL = 'pending_approval',
+  CONFIRMED = 'confirmed',
+  PREPARING = 'preparing',
+  SERVED = 'served',
+  CANCELLED = 'cancelled',
+}
+
+/**
+ * Order Status State Machine
+ * Valid transitions:
+ * - PENDING -> CONFIRMED, CANCELLED
+ * - PENDING_APPROVAL -> CONFIRMED, CANCELLED
+ * - CONFIRMED -> PREPARING, CANCELLED
+ * - PREPARING -> SERVED, CANCELLED
+ * - SERVED -> (terminal state)
+ * - CANCELLED -> (terminal state)
+ */
+export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  [OrderStatus.PENDING_APPROVAL]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+  [OrderStatus.PREPARING]: [OrderStatus.SERVED, OrderStatus.CANCELLED],
+  [OrderStatus.SERVED]: [],
+  [OrderStatus.CANCELLED]: [],
+};
+
+export const TERMINAL_STATUSES: OrderStatus[] = [
+  OrderStatus.SERVED,
+  OrderStatus.CANCELLED,
+];
+
+export function isValidStatusTransition(fromStatus: OrderStatus, toStatus: OrderStatus): boolean {
+  return ORDER_STATUS_TRANSITIONS[fromStatus]?.includes(toStatus) ?? false;
+}
+
+export function isTerminalStatus(status: OrderStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
 @Schema({ timestamps: true })
 export class Order extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Guest' })
@@ -16,6 +57,7 @@ export class Order extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   user?: Types.ObjectId;
+
   @Prop({
     type: [
       {
@@ -38,32 +80,25 @@ export class Order extends Document {
 
   @Prop({
     type: String,
-    enum: {
-      pending: 'pending',
-      pending_approval: 'pending_approval',
-      confirmed: 'confirmed',
-      preparing: 'preparing',
-      served: 'served',
-      cancelled: 'cancelled',
-    },
-    default: 'pending',
+    enum: Object.values(OrderStatus),
+    default: OrderStatus.PENDING,
   })
-  status: 'pending' | 'pending_approval' | 'confirmed' | 'preparing' | 'served' | 'cancelled';
+  status: OrderStatus;
 
   @Prop({ required: true, min: 0 })
-  totalPrice: number; // Tổng tiền của order
+  totalPrice: number;
 
   @Prop({ default: false })
   isPaid: boolean;
 
   @Prop()
-  specialInstructions?: string; // Ghi chú đặc biệt cho đơn hàng
+  specialInstructions?: string;
 
   @Prop()
-  estimatedReadyTime?: Date; // Thời gian dự kiến hoàn thành
+  estimatedReadyTime?: Date;
 
   @Prop({ type: Types.ObjectId, ref: 'Table', required: false })
-  table?: Types.ObjectId; // Bàn phục vụ
+  table?: Types.ObjectId;
 
   @Prop({
     type: String,
@@ -90,9 +125,8 @@ export class Order extends Document {
     email: string;
   };
 
-  // ========== Bulk Order Approval Fields ==========
   @Prop({ type: Boolean, default: false })
-  isBulkOrder: boolean; // Đánh dấu đơn hàng lớn
+  isBulkOrder: boolean;
 
   @Prop({ type: String, enum: ['auto', 'manual'], default: 'auto' })
   approvalType: 'auto' | 'manual';
@@ -104,20 +138,16 @@ export class Order extends Document {
   approvedAt: Date;
 
   @Prop()
-  approvalNote: string; // Ghi chú khi phê duyệt/từ chối
+  approvalNote: string;
 
-  // For D-Day inventory management
   @Prop({ type: Date })
-  reservationDate: Date; // Ngày sử dụng/đặt bàn
+  reservationDate: Date;
 
   @Prop({ type: Boolean, default: false })
-  inventoryReserved: boolean; // Đã reserve tồn kho
+  inventoryReserved: boolean;
 
-  // Timestamps are automatically handled by Mongoose when timestamps: true
   createdAt: Date;
   updatedAt: Date;
-
-  // Soft delete fields are handled by the plugin
   isDeleted?: boolean;
   deletedAt?: Date;
 }
@@ -136,7 +166,7 @@ export interface IOrder {
     unitPrice: number;
     subtotal: number;
   }[];
-  status: 'pending' | 'pending_approval' | 'confirmed' | 'preparing' | 'served' | 'cancelled';
+  status: OrderStatus;
   totalPrice: number;
   isPaid: boolean;
   specialInstructions?: string;
@@ -145,24 +175,13 @@ export interface IOrder {
   orderType: OrderType;
   deliveryAddress?: string;
   customerPhone?: string;
-  // Bulk Order Approval
   isBulkOrder: boolean;
   approvalType: 'auto' | 'manual';
   approvedBy?: Types.ObjectId;
   approvedAt?: Date;
   approvalNote?: string;
-  // D-Day Inventory
   reservationDate?: Date;
   inventoryReserved: boolean;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export enum OrderStatus {
-  PENDING = 'pending',
-  PENDING_APPROVAL = 'pending_approval', // Chờ phê duyệt cho đơn hàng lớn
-  CONFIRMED = 'confirmed', // Đã được phê duyệt
-  PREPARING = 'preparing',
-  SERVED = 'served',
-  CANCELLED = 'cancelled',
 }

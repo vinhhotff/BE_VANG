@@ -25,6 +25,12 @@ export class Table {
   @Prop({ type: Number, default: 1, min: 1 })
   height: number; // Số ô chiếm theo chiều dọc
 
+  @Prop({ type: Number, default: 1, min: 1 })
+  capacity: number; // Số người tối đa có thể ngồi
+
+  @Prop({ type: Date, default: null })
+  reservedAt: Date | null; // Timestamp when table was set to 'reserved'
+
   @Prop({ type: Object })
   updatedBy: {
     _id: mongoose.Schema.Types.ObjectId;

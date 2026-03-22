@@ -474,6 +474,14 @@ export class InventoryService {
       ).exec();
     }
 
+    // Track orderId in reservation document for audit trail
+    if (orderId && reservation && (reservation as any)._id) {
+      await this.dailyReservationModel.findByIdAndUpdate(
+        (reservation as any)._id,
+        { $push: { orderIds: orderId } }
+      ).exec();
+    }
+
     return reservation!;
   }
 
@@ -606,6 +614,7 @@ export class InventoryService {
 
   /**
    * Bulk reserve inventory for multiple items
+   * Uses atomic operations and proper rollback on failure
    */
   async bulkReserveInventory(items: Array<{ menuItemId: string; quantity: number }>, date: string, orderId?: string): Promise<{
     success: boolean;
@@ -616,36 +625,40 @@ export class InventoryService {
     }>;
   }> {
     const results: Array<{ menuItemId: string; success: boolean; message: string }> = [];
-    let allSuccess = true;
+    const successfulReservations: Array<{ menuItemId: string; quantity: number }> = [];
+    let lastError: Error | null = null;
 
     for (const item of items) {
       try {
         await this.reserveInventory(item.menuItemId, date, item.quantity, orderId);
+        successfulReservations.push({ menuItemId: item.menuItemId, quantity: item.quantity });
         results.push({
           menuItemId: item.menuItemId,
           success: true,
           message: 'Reserved successfully',
         });
       } catch (error: any) {
-        allSuccess = false;
+        lastError = error;
         results.push({
           menuItemId: item.menuItemId,
           success: false,
           message: error.message,
         });
-        
-        // Rollback previous reservations if any failed
-        for (let i = 0; i < results.length - 1; i++) {
-          if (results[i].success) {
-            const itemToRelease = items[i];
-            await this.releaseInventory(itemToRelease.menuItemId, date, itemToRelease.quantity, orderId);
+
+        // Rollback ONLY the successful reservations (not the failed one)
+        // Use try-catch to handle partial rollback failures gracefully
+        for (const reserved of successfulReservations) {
+          try {
+            await this.releaseInventory(reserved.menuItemId, date, reserved.quantity, orderId);
+          } catch (releaseError: any) {
+            console.error(`Failed to rollback reservation for ${reserved.menuItemId}:`, releaseError.message);
           }
         }
-        break;
+        break; // Stop processing after first failure
       }
     }
 
-    return { success: allSuccess, results };
+    return { success: successfulReservations.length === items.length, results };
   }
 
   /**

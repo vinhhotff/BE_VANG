@@ -10,10 +10,13 @@ import { MenuItem } from '../menu-item/schemas/menu-item.schema';
 import { InventoryService } from '../inventory/inventory.service';
 import { ApprovalConfig, BULK_ORDER_CONFIG } from './config/approval.config';
 import { NotificationService } from '../notification/notification.service';
+import { TableService } from '../table/table.service';
 
 @Injectable()
 export class ReservationService {
   private readonly approvalConfig: ApprovalConfig;
+  // Consistent time window for table reservations (2 hours before and after)
+  private readonly TABLE_TIME_WINDOW_HOURS = 2;
 
   constructor(
     @InjectModel(Reservation.name) private reservationModel: Model<Reservation>,
@@ -21,25 +24,35 @@ export class ReservationService {
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
     private readonly inventoryService: InventoryService,
     private readonly notificationService: NotificationService,
+    private readonly tableService: TableService,
   ) {
     this.approvalConfig = ApprovalConfig.getInstance();
   }
 
+  // Helper method to calculate time window
+  private getTimeWindow(reservationDate: Date): { start: Date; end: Date } {
+    const start = new Date(reservationDate.getTime() - this.TABLE_TIME_WINDOW_HOURS * 60 * 60 * 1000);
+    const end = new Date(reservationDate.getTime() + this.TABLE_TIME_WINDOW_HOURS * 60 * 60 * 1000);
+    return { start, end };
+  }
+
   async create(createReservationDto: CreateReservationDto, user: IUser): Promise<Reservation> {
     const reservationDate = new Date(createReservationDto.reservationDate);
-    
+
     // Kiểm tra ngày đặt bàn không được trong quá khứ
     if (reservationDate < new Date()) {
       throw new BadRequestException('Ngày đặt bàn không thể trong quá khứ');
     }
+
+    const { start, end } = this.getTimeWindow(reservationDate);
 
     // Kiểm tra xem có đặt trùng giờ không (có thể mở rộng logic này)
     const existingReservation = await this.reservationModel
       .findOne({
         customerPhone: createReservationDto.customerPhone,
         reservationDate: {
-          $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000), // 2 giờ trước
-          $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000), // 2 giờ sau
+          $gte: start,
+          $lte: end,
         },
         status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
       })
@@ -55,8 +68,8 @@ export class ReservationService {
         .findOne({
           tableNumber: createReservationDto.tableNumber,
           reservationDate: {
-            $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000), // 2 giờ trước
-            $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000), // 2 giờ sau
+            $gte: start,
+            $lte: end,
           },
           status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
         })
@@ -80,19 +93,21 @@ export class ReservationService {
 
   async createPublic(createReservationDto: CreateReservationDto): Promise<Reservation> {
     const reservationDate = new Date(createReservationDto.reservationDate);
-    
+
     // Kiểm tra ngày đặt bàn không được trong quá khứ
     if (reservationDate < new Date()) {
       throw new BadRequestException('Ngày đặt bàn không thể trong quá khứ');
     }
+
+    const { start, end } = this.getTimeWindow(reservationDate);
 
     // Kiểm tra xem có đặt trùng giờ không (có thể mở rộng logic này)
     const existingReservation = await this.reservationModel
       .findOne({
         customerPhone: createReservationDto.customerPhone,
         reservationDate: {
-          $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000), // 2 giờ trước
-          $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000), // 2 giờ sau
+          $gte: start,
+          $lte: end,
         },
         status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
       })
@@ -108,8 +123,8 @@ export class ReservationService {
         .findOne({
           tableNumber: createReservationDto.tableNumber,
           reservationDate: {
-            $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000), // 2 giờ trước
-            $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000), // 2 giờ sau
+            $gte: start,
+            $lte: end,
           },
           status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
         })
@@ -318,14 +333,13 @@ export class ReservationService {
     const [hours, minutes] = time.split(':').map(Number);
     reservationDate.setHours(hours, minutes, 0, 0);
 
-    // Calculate time window (2 hours before and after)
-    const startWindow = new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000);
-    const endWindow = new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000);
+    // Use consistent time window
+    const { start, end } = this.getTimeWindow(reservationDate);
 
     // Find all reserved tables in this time window
     const reservedTables = await this.reservationModel
       .find({
-        reservationDate: { $gte: startWindow, $lte: endWindow },
+        reservationDate: { $gte: start, $lte: end },
         status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] },
       })
       .populate('table')
@@ -355,7 +369,7 @@ export class ReservationService {
         location: t.location,
         status: t.status,
       })),
-      message: availableTables.length > 0 
+      message: availableTables.length > 0
         ? `Còn ${availableTables.length} bàn trống`
         : 'Tất cả bàn đã được đặt trong khung giờ này',
     };
@@ -457,14 +471,15 @@ export class ReservationService {
       ? ReservationStatus.PENDING_APPROVAL
       : (hasItems ? ReservationStatus.PENDING : ReservationStatus.PENDING);
 
-    // Check table availability if table is selected
+    // Check table availability if table is selected (with atomic check)
     if (dto.tableId) {
+      const { start, end } = this.getTimeWindow(reservationDate);
       const tableReservation = await this.reservationModel
         .findOne({
           table: dto.tableId,
           reservationDate: {
-            $gte: new Date(reservationDate.getTime() - 2 * 60 * 60 * 1000),
-            $lte: new Date(reservationDate.getTime() + 2 * 60 * 60 * 1000),
+            $gte: start,
+            $lte: end,
           },
           status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.PENDING_APPROVAL] }
         })
@@ -503,6 +518,16 @@ export class ReservationService {
 
     const savedReservation = await reservation.save();
 
+    // Update table status to 'reserved' if table is selected
+    if (dto.tableId) {
+      try {
+        await this.tableService.updateTableStatus(dto.tableId, 'reserved');
+      } catch (error) {
+        console.error('Failed to update table status:', error);
+        // Continue anyway - table is still reserved in reservation
+      }
+    }
+
     // Reserve inventory if there are items (and not requiring approval)
     if (hasItems && !requiresApproval && dto.items) {
       try {
@@ -511,10 +536,22 @@ export class ReservationService {
           menuItemId: item.menuItemId,
           quantity: item.quantity,
         }));
-        await this.inventoryService.bulkReserveInventory(bulkItems, dateStr, savedReservation._id.toString());
+        const inventoryResult = await this.inventoryService.bulkReserveInventory(bulkItems, dateStr, savedReservation._id.toString());
+        
+        // If inventory reservation failed, delete reservation and throw error
+        if (!inventoryResult.success) {
+          await this.reservationModel.findByIdAndDelete(savedReservation._id);
+          const failedItems = inventoryResult.results.filter(r => !r.success);
+          throw new BadRequestException(
+            `Không thể đặt món: ${failedItems.map(r => r.message).join(', ')}`
+          );
+        }
       } catch (error) {
-        // If inventory reservation fails, delete the reservation
+        // If inventory reservation fails, delete the reservation and rollback table status
         await this.reservationModel.findByIdAndDelete(savedReservation._id);
+        if (dto.tableId) {
+          await this.tableService.updateTableStatus(dto.tableId, 'available').catch(() => {});
+        }
         throw new BadRequestException(`Không thể đặt món: ${error.message}`);
       }
     }
@@ -608,13 +645,13 @@ export class ReservationService {
   }
 
   /**
-   * Cancel full booking and release inventory
+   * Cancel full booking and release inventory + table
    */
   async cancelFullBooking(id: string): Promise<Reservation> {
     const reservation = await this.findById(id);
 
     // Check if can cancel
-    if (![ReservationStatus.PENDING, ReservationStatus.CONFIRMED].includes(reservation.status)) {
+    if (![ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.PENDING_APPROVAL].includes(reservation.status)) {
       throw new BadRequestException('Không thể hủy đặt bàn với trạng thái hiện tại');
     }
 
@@ -635,8 +672,23 @@ export class ReservationService {
       }
     }
 
+    // Release table if table was reserved
+    if (reservation.table) {
+      try {
+        const tableId = reservation.table instanceof Types.ObjectId 
+          ? reservation.table.toString() 
+          : (reservation.table as any)._id?.toString() || String(reservation.table);
+        await this.tableService.updateTableStatus(tableId, 'available');
+      } catch (error) {
+        console.error('Error releasing table:', error);
+      }
+    }
+
     // Update status
     reservation.status = ReservationStatus.CANCELLED;
+    if (reservation.approvalStatus === ApprovalStatus.PENDING) {
+      reservation.approvalStatus = ApprovalStatus.EXPIRED;
+    }
     return reservation.save();
   }
 
@@ -725,6 +777,7 @@ export class ReservationService {
 
   /**
    * Approve a reservation
+   * If inventory reservation fails, the approval fails and customer is notified
    */
   async approveReservation(reservationId: string, dto: ApproveReservationDto, user: IUser): Promise<Reservation> {
     const reservation = await this.findById(reservationId);
@@ -743,6 +796,49 @@ export class ReservationService {
       throw new BadRequestException('Yêu cầu phê duyệt đã hết hạn');
     }
 
+    // Reserve inventory for approved order BEFORE updating status
+    // If this fails, the approval should fail
+    let inventoryReserved = false;
+    if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+      try {
+        const dateStr = reservation.usageDate.toISOString().split('T')[0];
+        const bulkItems = reservation.items.map(item => ({
+          menuItemId: item.item.toString(),
+          quantity: item.quantity,
+        }));
+        const inventoryResult = await this.inventoryService.bulkReserveInventory(
+          bulkItems, 
+          dateStr, 
+          reservation._id.toString()
+        );
+        
+        if (!inventoryResult.success) {
+          const failedItems = inventoryResult.results.filter(r => !r.success);
+          const errorMessage = failedItems.map(r => r.message).join(', ');
+          
+          // Send notification to customer about inventory issue
+          try {
+            await this.notificationService.sendToUser(reservation.customerPhone, {
+              type: 'BULK_ORDER_APPROVAL_FAILED',
+              title: 'Đơn hàng không thể xác nhận',
+              message: `Rất tiếc, đơn hàng của bạn không thể xác nhận do: ${errorMessage}. Vui lòng liên hệ nhà hàng.`,
+              data: { reservationId: reservation._id.toString() },
+            });
+          } catch (notifError) {
+            console.error('Failed to send inventory failure notification:', notifError);
+          }
+          
+          throw new BadRequestException(
+            `Không thể xác nhận đơn hàng do: ${errorMessage}`
+          );
+        }
+        inventoryReserved = true;
+      } catch (error) {
+        // If inventory reservation fails, the approval fails
+        throw error;
+      }
+    }
+
     // Update approval status
     reservation.approvalStatus = ApprovalStatus.APPROVED;
     reservation.approvedAt = new Date();
@@ -754,21 +850,6 @@ export class ReservationService {
     reservation.status = ReservationStatus.PENDING; // Now waiting for deposit
 
     const savedReservation = await reservation.save();
-
-    // Reserve inventory for approved order
-    if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
-      try {
-        const dateStr = reservation.usageDate.toISOString().split('T')[0];
-        const bulkItems = reservation.items.map(item => ({
-          menuItemId: item.item.toString(),
-          quantity: item.quantity,
-        }));
-        await this.inventoryService.bulkReserveInventory(bulkItems, dateStr, reservation._id.toString());
-      } catch (error) {
-        console.error('Failed to reserve inventory after approval:', error);
-        // Don't fail the approval, just log the error
-      }
-    }
 
     // Send notification to customer
     try {
@@ -979,19 +1060,41 @@ export class ReservationService {
       },
     ]).exec();
 
-    // Get today's activity
-    const [todayActivity] = await this.reservationModel.aggregate([
+    // Query for today's approvals/rejections/expirations using the correct timestamp fields
+    const [approvedTodayCount] = await this.reservationModel.aggregate([
       {
         $match: {
-          updatedAt: { $gte: today, $lt: tomorrow },
+          approvedAt: { $gte: today, $lt: tomorrow },
           status: ReservationStatus.PENDING_APPROVAL,
         },
       },
       {
-        $group: {
-          _id: '$approvalStatus',
-          count: { $sum: 1 },
+        $group: { _id: '$approvalStatus', count: { $sum: 1 } },
+      },
+    ]).exec();
+
+    const [rejectedTodayCount] = await this.reservationModel.aggregate([
+      {
+        $match: {
+          rejectedAt: { $gte: today, $lt: tomorrow },
+          status: ReservationStatus.CANCELLED,
         },
+      },
+      {
+        $group: { _id: '$approvalStatus', count: { $sum: 1 } },
+      },
+    ]).exec();
+
+    const [expiredTodayCount] = await this.reservationModel.aggregate([
+      {
+        $match: {
+          updatedAt: { $gte: today, $lt: tomorrow },
+          status: ReservationStatus.CANCELLED,
+          approvalStatus: ApprovalStatus.EXPIRED,
+        },
+      },
+      {
+        $group: { _id: '$approvalStatus', count: { $sum: 1 } },
       },
     ]).exec();
 
@@ -1010,14 +1113,15 @@ export class ReservationService {
       }
     }
 
-    for (const activity of todayActivity) {
-      if (activity._id === ApprovalStatus.APPROVED) {
-        result.approvedToday = activity.count;
-      } else if (activity._id === ApprovalStatus.REJECTED) {
-        result.rejectedToday = activity.count;
-      } else if (activity._id === ApprovalStatus.EXPIRED) {
-        result.expiredToday = activity.count;
-      }
+    // Process today's activity using the correct timestamp fields
+    if (approvedTodayCount && approvedTodayCount._id === ApprovalStatus.APPROVED) {
+      result.approvedToday = approvedTodayCount.count;
+    }
+    if (rejectedTodayCount && rejectedTodayCount._id === ApprovalStatus.REJECTED) {
+      result.rejectedToday = rejectedTodayCount.count;
+    }
+    if (expiredTodayCount && expiredTodayCount._id === ApprovalStatus.EXPIRED) {
+      result.expiredToday = expiredTodayCount.count;
     }
 
     return result;
@@ -1037,8 +1141,20 @@ export class ReservationService {
 
   /**
    * Update approval settings (admin only)
+   * Validates input to prevent disabling approval requirements unintentionally
    */
   updateApprovalSettings(dto: UpdateApprovalSettingsDto): ApprovalSettingsResponseDto {
+    // Validate input values
+    if (dto.minItemsThreshold !== undefined && dto.minItemsThreshold < 1) {
+      throw new BadRequestException('Số lượng món tối thiểu phải >= 1');
+    }
+    if (dto.minValueThreshold !== undefined && dto.minValueThreshold < 0) {
+      throw new BadRequestException('Giá trị tối thiểu không được âm');
+    }
+    if (dto.autoExpireHours !== undefined && (dto.autoExpireHours < 1 || dto.autoExpireHours > 168)) {
+      throw new BadRequestException('Thời gian hết hạn phải từ 1 đến 168 giờ (1 tuần)');
+    }
+
     const updateData: any = {};
 
     if (dto.minItemsThreshold !== undefined || dto.minValueThreshold !== undefined) {

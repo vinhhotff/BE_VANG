@@ -6,10 +6,19 @@ import { PaymentController } from './pay-ment.controller';
 import { PayOSController } from './payos.controller';
 import { PayMentService } from './pay-ment.service';
 import { OrderModule } from 'src/order/order.module';
+import { MenuItemIngredient, MenuItemIngredientSchema } from '../inventory/schemas/menu-item-ingredient.schema';
+import { Ingredient, IngredientSchema } from '../inventory/schemas/ingredient.schema';
+import { MenuItem, MenuItemSchema } from '../menu-item/schemas/menu-item.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Payment.name, schema: PaymentSchema }]),OrderModule
+    MongooseModule.forFeature([
+      { name: Payment.name, schema: PaymentSchema },
+      { name: MenuItemIngredient.name, schema: MenuItemIngredientSchema },
+      { name: Ingredient.name, schema: IngredientSchema },
+      { name: MenuItem.name, schema: MenuItemSchema },
+    ]),
+    OrderModule
   ],
   controllers: [PaymentController, PayOSController],
   providers: [PayMentService],

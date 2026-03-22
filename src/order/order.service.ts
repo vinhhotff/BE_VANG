@@ -11,6 +11,9 @@ import {
   OrderDocument,
   OrderStatus,
   OrderType,
+  isValidStatusTransition,
+  isTerminalStatus,
+  ORDER_STATUS_TRANSITIONS,
 } from './schemas/order.schema';
 import { CreateOrderDto, CreateOnlineOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
@@ -374,6 +377,14 @@ export class OrderService {
 
     const previousStatus = existingOrder.status;
 
+    // Validate status transition using state machine
+    if (!isValidStatusTransition(previousStatus, status)) {
+      throw new BadRequestException(
+        `Invalid status transition from '${previousStatus}' to '${status}'. ` +
+        `Valid transitions from '${previousStatus}': ${ORDER_STATUS_TRANSITIONS[previousStatus]?.join(', ') || 'none'}`
+      );
+    }
+
     // Update order status
     const order = await this.orderModel
       .findByIdAndUpdate(id, { status }, { new: true })
@@ -438,10 +449,10 @@ export class OrderService {
       try {
         const userId = order.user?.toString();
         const guestId = order.guest?.toString();
-        const notificationType = status === OrderStatus.CANCELLED 
-          ? NotificationType.ORDER_CANCELLED 
+        const notificationType = status === OrderStatus.CANCELLED
+          ? NotificationType.ORDER_CANCELLED
           : NotificationType.ORDER_STATUS_CHANGED;
-        
+
         const notification = await this.notificationService.createOrderNotification(
           notificationType,
           order._id.toString(),
@@ -477,13 +488,10 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
-    // Don't allow updates if order is already served or cancelled
-    if (
-      existingOrder.status === OrderStatus.SERVED ||
-      existingOrder.status === OrderStatus.CANCELLED
-    ) {
+    // Check if order is in terminal state using state machine
+    if (isTerminalStatus(existingOrder.status)) {
       throw new ForbiddenException(
-        `Cannot update order with status: ${existingOrder.status}`
+        `Cannot update order with status: ${existingOrder.status}. Order is in a terminal state.`
       );
     }
 

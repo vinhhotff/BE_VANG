@@ -141,9 +141,15 @@ export class TableService {
   ): Promise<Table> {
     const updateData: any = { status };
 
-    // Nếu chuyển sang available hoặc maintenance, xóa currentOrder
+    // Nếu chuyển sang available hoặc maintenance, xóa currentOrder và reservedAt
     if (status === 'available' || status === 'maintenance') {
       updateData.currentOrder = null;
+      updateData.reservedAt = null;
+    }
+
+    // Set reservedAt timestamp when table becomes reserved
+    if (status === 'reserved') {
+      updateData.reservedAt = new Date();
     }
 
     const table = await this.tableModel

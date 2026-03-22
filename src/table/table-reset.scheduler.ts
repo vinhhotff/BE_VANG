@@ -15,6 +15,7 @@ export class TableResetScheduler {
   /**
    * Chạy mỗi giờ một lần để kiểm tra và reset những bàn đang ở trạng thái 'reserved'
    * mà đã được đặt hơn 2 ngày (48 giờ) trước.
+   * Sử dụng reservedAt thay vì updatedAt để tránh reset bàn bị cập nhật vì lý do khác.
    */
   @Cron(CronExpression.EVERY_HOUR)
   async resetExpiredReservedTables(): Promise<void> {
@@ -23,16 +24,21 @@ export class TableResetScheduler {
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
     try {
-      // Tìm tất cả bàn có status = 'reserved' và updatedAt > 2 ngày trước
+      // Tìm tất cả bàn có status = 'reserved' và reservedAt > 2 ngày trước
+      // Nếu reservedAt là null, sử dụng updatedAt như fallback
       const result = await this.tableModel.updateMany(
         {
           status: 'reserved',
-          updatedAt: { $lt: twoDaysAgo },
+          $or: [
+            { reservedAt: { $lt: twoDaysAgo } },
+            { reservedAt: null, updatedAt: { $lt: twoDaysAgo } }
+          ]
         },
         {
           $set: {
             status: 'available',
             currentOrder: null,
+            reservedAt: null,
           },
         },
       );
