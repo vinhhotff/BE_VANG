@@ -79,16 +79,13 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
       }
 
       this.connectedClients.set(client.id, client);
-      console.log(`Client connected: ${client.id}, User: ${client.userId || client.guestId || 'anonymous'}`);
     } catch (error) {
-      console.error('Connection error:', error);
       client.disconnect();
     }
   }
 
   handleDisconnect(client: AuthenticatedSocket) {
     this.connectedClients.delete(client.id);
-    console.log(`Client disconnected: ${client.id}`);
   }
 
   // Send notification to specific user

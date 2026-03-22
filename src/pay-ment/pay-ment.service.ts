@@ -34,11 +34,7 @@ export class PayMentService {
     const checksumKey = this.configService.get<string>('PAYOS_CHECKSUM_KEY') || '';
 
     if (!clientId || !apiKey || !checksumKey) {
-      console.error('PayOS credentials missing:', {
-        hasClientId: !!clientId,
-        hasApiKey: !!apiKey,
-        hasChecksumKey: !!checksumKey,
-      });
+      // Silent fail - payment service will throw error when used
     } else {
       this.payos = new PayOS({
         clientId,
@@ -159,12 +155,6 @@ async getTotalRevenue(): Promise<number> {
           price: Math.round(amount),
         }
       ];
-      console.log('Creating PayOS payment link for reservation:', {
-        orderId,
-        amount,
-        description,
-        orderCode,
-      });
     } else {
       // For regular orders, verify order exists and populate items
       order = await this.orderModel
@@ -174,12 +164,6 @@ async getTotalRevenue(): Promise<number> {
       if (!order) {
         throw new NotFoundException('Order not found');
       }
-
-      console.log('Creating PayOS payment link for order:', {
-        orderId,
-        amount,
-        description,
-      });
 
       // Generate order code (must be unique and between 100000 and 999999)
       // Check if order already has a payosOrderCode to avoid duplicates
@@ -254,12 +238,6 @@ async getTotalRevenue(): Promise<number> {
         ],
       });
 
-      console.log('PayOS payment link created:', {
-        orderCode,
-        checkoutUrl: paymentLink.checkoutUrl,
-        isReservationPayment,
-      });
-
       // Store order code in order for later verification (only for regular orders)
       if (!isReservationPayment && order) {
         (order as any).payosOrderCode = orderCode;
@@ -317,13 +295,6 @@ async getTotalRevenue(): Promise<number> {
       // Use PayOS SDK to get payment information
       const paymentInfo = await this.payos.paymentRequests.get(orderCode);
 
-      console.log('PayOS payment info:', {
-        orderCode: paymentInfo.orderCode,
-        status: paymentInfo.status,
-        code: (paymentInfo as any).code,
-        transactionDateTime: (paymentInfo as any).transactionDateTime,
-      });
-
       // Check if payment is successful
       // PayOS SDK status values: PENDING, CANCELLED, UNDERPAID, EXPIRED, PROCESSING, FAILED
       // Payment is considered successful if:
@@ -379,7 +350,6 @@ async getTotalRevenue(): Promise<number> {
           // Stock is available, proceed with status update
           await this.orderService.updateStatus(order._id.toString(), OrderStatus.SERVED);
         } catch (stockError) {
-          console.error('Stock check/update failed:', stockError);
           // Payment was successful but we cannot serve the order
           // DO NOT throw - payment record is already processed
           // Log for manual intervention and refund processing

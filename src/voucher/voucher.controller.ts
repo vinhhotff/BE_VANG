@@ -39,8 +39,6 @@ export class VoucherController {
   findAll(
     @Query(new ValidationPipe({ transform: true })) query: VoucherQueryDto
   ): Promise<PaginationResponseDto<any>> {
-    console.log('🔍 Voucher Controller - Standardized query received:', query);
-
     return this.voucherService.findAll(
       query.page,
       query.limit,

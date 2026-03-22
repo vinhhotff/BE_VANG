@@ -78,11 +78,8 @@ export class VoucherService {
       filter.status = status;
     }
 
-    console.log('🔍 Voucher findAll - Filter applied:', filter);
-
     // Create sort object
     const sort = buildSortObject(sortBy, sortOrder);
-    console.log('🔍 Voucher findAll - Sort applied:', sort);
 
     const skip = (page - 1) * limit;
     const total = await this.voucherModel.countDocuments(filter);
@@ -95,8 +92,6 @@ export class VoucherService {
       .skip(skip)
       .limit(limit)
       .exec();
-
-    console.log(`✅ Voucher findAll - Found ${vouchers.length} vouchers on page ${page}`);
 
     return new PaginationResponseDto(vouchers, total, page, limit);
   }

@@ -38,8 +38,6 @@ export class ReviewService {
             const role = await this.roleService.findById(user.role.toString());
             return role?.name || '';
           } catch (error) {
-            // If role not found, return empty string
-            console.warn(`Role not found for user ${user._id}:`, error);
             return '';
           }
         }
@@ -47,7 +45,6 @@ export class ReviewService {
       
       return '';
     } catch (error) {
-      console.error('Error getting user role name:', error);
       return '';
     }
   }
@@ -146,18 +143,7 @@ export class ReviewService {
     try {
       roleName = await this.getUserRoleName(user);
       isAdmin = roleName.toUpperCase() === 'ADMIN';
-      
-      // Log for debugging
-      if (updateReviewDto.status) {
-        console.log('Review update - User role check:', {
-          userId: user._id,
-          roleName,
-          isAdmin,
-          requestedStatus: updateReviewDto.status,
-        });
-      }
     } catch (error) {
-      console.error('Error getting user role:', error);
       // If we can't get role but user passed permission guard, 
       // assume they have permission (permission guard already verified)
       // But for security, we'll still require explicit admin role for status updates

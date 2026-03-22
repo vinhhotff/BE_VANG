@@ -150,7 +150,7 @@ export class OrderService {
       );
       await this.notificationGateway.sendToAdmins(notification);
     } catch (error) {
-      console.error('Error sending order notification:', error);
+      // Silent fail for notifications
     }
 
     return savedOrder;
@@ -255,7 +255,7 @@ export class OrderService {
       );
       await this.notificationGateway.sendToAdmins(notification);
     } catch (error) {
-      console.error('Error sending order notification:', error);
+      // Silent fail for notifications
     }
 
     return savedOrder;
@@ -294,11 +294,8 @@ export class OrderService {
     if (guest) filter.guest = guest;
     if (user) filter.user = user;
 
-    console.log('🔍 Order findAll - Filter applied:', filter);
-
     // Create sort object
     const sort = buildSortObject(sortBy, sortOrder);
-    console.log('🔍 Order findAll - Sort applied:', sort);
 
     const skip = (page - 1) * limit;
     const total = await this.orderModel.countDocuments(filter);
@@ -312,10 +309,6 @@ export class OrderService {
       .skip(skip)
       .limit(limit)
       .exec();
-
-    console.log(
-      `✅ Order findAll - Found ${orders.length} orders on page ${page}`
-    );
 
     return new PaginationResponseDto(orders, total, page, limit);
   }
@@ -368,24 +361,7 @@ export class OrderService {
       throw new BadRequestException('Invalid order ID format');
     }
 
-    // Debug logging
-    console.log('🔍 Backend received status update:', {
-      orderId: id,
-      receivedStatus: status,
-      statusType: typeof status,
-      validStatuses: Object.values(OrderStatus),
-      isStatusValid: Object.values(OrderStatus).includes(status),
-    });
-
     if (!Object.values(OrderStatus).includes(status)) {
-      console.error('❌ Status validation failed:', {
-        received: status,
-        expected: Object.values(OrderStatus),
-        comparison: Object.values(OrderStatus).map((s) => ({
-          value: s,
-          matches: s === status,
-        })),
-      });
       throw new BadRequestException('Invalid order status');
     }
 
@@ -425,7 +401,6 @@ export class OrderService {
           const itemId = item.item._id?.toString() || item.item.toString();
           await this.menuItemService.deductStock(itemId, item.quantity);
         }
-        console.log(`✅ Menu item stock deducted for order ${id}`);
 
         // 2. Process ingredient inventory stock (if linked)
         const orderItems = order.items.map((item: any) => ({
@@ -433,9 +408,7 @@ export class OrderService {
           quantity: item.quantity,
         }));
         await this.inventoryService.processOrderStock(orderItems);
-        console.log(`✅ Inventory stock deducted for order ${id}`);
       } catch (error: any) {
-        console.error('❌ Error processing stock:', error);
         // Revert status if stock processing fails
         await this.orderModel.findByIdAndUpdate(id, { status: previousStatus }).exec();
         throw new BadRequestException(
@@ -452,7 +425,6 @@ export class OrderService {
           const itemId = item.item._id?.toString() || item.item.toString();
           await this.menuItemService.restoreStock(itemId, item.quantity);
         }
-        console.log(`✅ Menu item stock restored for cancelled order ${id}`);
 
         // 2. Restore ingredient inventory stock
         const orderItems = order.items.map((item: any) => ({
@@ -460,9 +432,7 @@ export class OrderService {
           quantity: item.quantity,
         }));
         await this.inventoryService.restoreOrderStock(orderItems);
-        console.log(`✅ Inventory stock restored for cancelled order ${id}`);
       } catch (error: any) {
-        console.error('❌ Error restoring stock:', error);
         // Log error but don't fail the cancellation
       }
     }
@@ -476,7 +446,6 @@ export class OrderService {
         );
       } catch (error) {
         // Log error nhưng không throw để không ảnh hưởng đến việc cập nhật status
-        console.error('Error adding loyalty points:', error);
       }
     }
 
@@ -504,7 +473,7 @@ export class OrderService {
           await this.notificationGateway.sendToGuest(guestId, notification);
         }
       } catch (error) {
-        console.error('Error sending status change notification:', error);
+        // Silent fail for notifications
       }
     }
 
@@ -647,7 +616,7 @@ export class OrderService {
     }
 
     const order = await this.orderModel
-      .findByIdAndUpdate(id, { paid: true }, { new: true })
+      .findByIdAndUpdate(id, { isPaid: markOrderPaidDto.isPaid }, { new: true })
       .populate('items.item', 'name price category images')
       .populate('guest', 'tableCode')
       .populate('user', 'name email')

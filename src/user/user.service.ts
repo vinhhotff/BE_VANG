@@ -126,8 +126,6 @@ export class UserService {
       status,
     } = query;
 
-    console.log('🔍 SearchUsers called with standardized query:', query);
-
     // Build base filter
     let filter: any = {};
 
@@ -152,16 +150,11 @@ export class UserService {
           // Use ObjectId for filtering
           const roleIds = matchingRoles.map((r) => r._id);
           filter.role = { $in: roleIds };
-          console.log(
-            `🔍 Filtering by role: ${role} -> ${roleIds.length} role(s) found`
-          );
         } else {
-          console.warn(`⚠️ No role found with name: ${role}`);
           // Return empty result if role not found
           filter.role = { $in: [] };
         }
       } catch (error) {
-        console.error('❌ Error finding role:', error);
         // Fallback: try to use role as ObjectId if it's a valid ObjectId
         if (Types.ObjectId.isValid(role)) {
           filter.role = new Types.ObjectId(role);
@@ -178,15 +171,11 @@ export class UserService {
       // filter.status = status;
     }
 
-    console.log('🔍 Final filter applied:', filter);
-
     // Tạo sort object
     const sort = buildSortObject(sortBy, sortOrder);
-    console.log('🔍 Sort applied:', sort);
 
     // Đếm tổng số documents
     const total = await this.userModel.countDocuments(filter);
-    console.log('🔍 Total documents found:', total);
 
     // Tính toán pagination
     const skip = (page - 1) * limit;
@@ -205,13 +194,6 @@ export class UserService {
       .lean() // Convert to plain JavaScript objects for better performance
       .exec();
 
-    console.log(`✅ Found ${data.length} users on page ${page}`);
-    console.log('🔍 First user sample (before normalization):', {
-      name: data[0]?.name,
-      email: data[0]?.email,
-      role: data[0]?.role,
-    });
-
     // Normalize role từ object sang string
     // Role có thể là: { _id: '...', name: 'user' } hoặc string
     const normalizedUsers = data.map((user: any) => ({
@@ -219,12 +201,6 @@ export class UserService {
       role:
         typeof user.role === 'string' ? user.role : user.role?.name || 'user',
     }));
-
-    console.log('🔍 First user sample (after normalization):', {
-      name: normalizedUsers[0]?.name,
-      email: normalizedUsers[0]?.email,
-      role: normalizedUsers[0]?.role,
-    });
 
     // Trả về theo format chuẩn với normalized users
     const result = new PaginationResponseDto(
@@ -234,22 +210,11 @@ export class UserService {
       limit
     );
 
-    console.log('🚀 User Service - Returning standardized format:', {
-      hasData: !!result.data,
-      dataLength: result.data ? result.data.length : 0,
-      hasMeta: !!result.meta,
-      metaTotal: result.meta ? result.meta.total : 'no meta',
-      resultKeys: Object.keys(result),
-    });
-
     return result;
   }
 
   private parseQueryString(qs: string): Record<string, string> {
     const conditions: Record<string, string> = {};
-
-    console.log('🔍 Parsing query string:', qs);
-    console.log('🔍 Decoded query string:', decodeURIComponent(qs));
 
     // Auto-detect delimiter: & (URL encoded) or , (comma separated)
     const decodedQs = decodeURIComponent(qs);
@@ -258,14 +223,10 @@ export class UserService {
     if (decodedQs.includes('&')) {
       // URL encoded format: "role=staff&sortBy=name&sortOrder=desc"
       pairs = decodedQs.split('&').map((pair) => pair.trim());
-      console.log('🔍 Detected URL encoded format (&)');
     } else {
       // Comma separated format: "role=admin,name=vinh,email=test@example.com"
       pairs = decodedQs.split(',').map((pair) => pair.trim());
-      console.log('🔍 Detected comma separated format (,)');
     }
-
-    console.log('🔍 Split pairs:', pairs);
 
     for (const pair of pairs) {
       const [key, value] = pair.split('=');
@@ -273,11 +234,9 @@ export class UserService {
         const cleanKey = key.trim();
         const cleanValue = value.trim();
         conditions[cleanKey] = cleanValue;
-        console.log(`✅ Parsed condition: ${cleanKey} = ${cleanValue}`);
       }
     }
 
-    console.log('🔍 Final parsed conditions:', conditions);
     return conditions;
   }
 
@@ -298,33 +257,20 @@ export class UserService {
       'sortOrder',
     ];
 
-    console.log('🔍 Building MongoDB filter for conditions:', conditions);
-
     for (const [key, value] of Object.entries(conditions)) {
       if (validFields.includes(key)) {
         if (key === 'sortBy' || key === 'sortOrder') {
           // Bỏ qua sort parameters - đã được xử lý ở searchUsers
-          console.log(`ℹ️ Skipping sort parameter: ${key}`);
         } else if (key === 'role') {
           // Tìm role theo tên thay vì ObjectId
-          console.log(`🔍 Searching for role with name: ${value}`);
-
           const roleModel = this.userModel.db.model('Role');
 
-          // Debug: Kiểm tra tất cả roles trong DB
           const allRoles = await roleModel.find({}).select('_id name').exec();
-          console.log('🔍 All roles in DB:', allRoles);
-
           const matchingRoles = await roleModel
             .find({
               name: { $regex: value, $options: 'i' },
             })
             .select('_id name');
-
-          console.log(
-            '🔍 Found matching roles for "' + value + '":',
-            matchingRoles
-          );
 
           if (matchingRoles.length > 0) {
             // Handle both ObjectId and string types for role field
@@ -336,17 +282,9 @@ export class UserService {
             filter.role = {
               $in: [...roleIds, ...roleStrings],
             };
-
-            console.log(
-              '✅ Role filter applied with both ObjectId and string:',
-              filter.role
-            );
           } else {
             // Nếu không tìm thấy role, đặt điều kiện không thể match
             filter.role = null;
-            console.log(
-              '❌ No matching roles found, setting role filter to null'
-            );
           }
         } else if (key === 'search') {
           // Tìm kiếm tổng hợp trong name và email
@@ -354,22 +292,16 @@ export class UserService {
             { name: { $regex: value, $options: 'i' } },
             { email: { $regex: value, $options: 'i' } },
           ];
-          console.log('✅ Search filter applied:', filter.$or);
         } else if (key === 'name' || key === 'email' || key === 'phone') {
           // Text fields sử dụng regex để partial search (case-insensitive)
           filter[key] = { $regex: value, $options: 'i' };
-          console.log(`✅ ${key} filter applied:`, filter[key]);
         } else {
           // Exact match cho các field khác
           filter[key] = value;
-          console.log(`✅ ${key} exact match filter applied:`, value);
         }
-      } else {
-        console.log(`⚠️ Skipping invalid field: ${key}`);
       }
     }
 
-    console.log('🔍 Final MongoDB filter:', filter);
     return filter;
   }
 
