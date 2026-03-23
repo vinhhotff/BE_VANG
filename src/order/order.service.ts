@@ -28,6 +28,7 @@ import { InventoryService } from '../inventory/inventory.service';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationGateway } from '../notification/notification.gateway';
 import { NotificationType } from '../notification/schemas/notification.schema';
+import { CheckStockDto, CheckStockResultDto, CheckStockItemDto, CheckStockResultItemDto } from './dto/check-stock.dto';
 import {
   PaginationResponseDto,
   buildSortObject,
@@ -627,5 +628,84 @@ export class OrderService {
     }
 
     return order;
+  }
+
+  // ========== Check Stock Availability ==========
+  async checkStockAvailability(
+    items: CheckStockItemDto[]
+  ): Promise<CheckStockResultDto> {
+    const results: CheckStockResultItemDto[] = [];
+    let allAvailable = true;
+
+    for (const orderItem of items) {
+      const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
+      
+      if (!menuItem) {
+        results.push({
+          itemId: orderItem.item,
+          itemName: 'Unknown',
+          requestedQuantity: orderItem.quantity,
+          availableStock: null,
+          isAvailable: false,
+          message: `Menu item not found`,
+        });
+        allAvailable = false;
+        continue;
+      }
+
+      // Check availability
+      if (!menuItem.available) {
+        results.push({
+          itemId: orderItem.item,
+          itemName: menuItem.name,
+          requestedQuantity: orderItem.quantity,
+          availableStock: menuItem.stock,
+          isAvailable: false,
+          message: `Menu item '${menuItem.name}' is currently not available`,
+        });
+        allAvailable = false;
+        continue;
+      }
+
+      // Check stock (null = unlimited)
+      if (menuItem.stock !== null && menuItem.stock !== undefined) {
+        if (menuItem.stock < orderItem.quantity) {
+          results.push({
+            itemId: orderItem.item,
+            itemName: menuItem.name,
+            requestedQuantity: orderItem.quantity,
+            availableStock: menuItem.stock,
+            isAvailable: false,
+            message: `Menu item '${menuItem.name}' chỉ còn ${menuItem.stock} phần, không đủ cho số lượng yêu cầu ${orderItem.quantity}`,
+          });
+          allAvailable = false;
+          continue;
+        }
+      }
+
+      // Available
+      results.push({
+        itemId: orderItem.item,
+        itemName: menuItem.name,
+        requestedQuantity: orderItem.quantity,
+        availableStock: menuItem.stock,
+        isAvailable: true,
+        message: menuItem.stock === null 
+          ? `Unlimited stock available`
+          : `${menuItem.stock} available`,
+      });
+    }
+
+    const unavailableItems = results.filter(r => !r.isAvailable);
+    const message = allAvailable 
+      ? 'All items are available'
+      : `Có ${unavailableItems.length} món không đủ stock: ${unavailableItems.map(i => i.itemName).join(', ')}`;
+
+    return {
+      success: true,
+      available: allAvailable,
+      items: results,
+      message,
+    };
   }
 }

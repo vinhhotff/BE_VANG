@@ -9,6 +9,7 @@ import {
   Query,
   BadRequestException,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Permission, Public } from '../auth/decoration/setMetadata';
 import { OrderService } from './order.service';
 import { CreateOrderDto, CreateOnlineOrderDto } from './dto/create-order.dto';
@@ -18,7 +19,9 @@ import { OrderStatus } from './schemas/order.schema';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { PaginationResponseDto } from '../common/dto/pagination.dto';
 import { ValidationPipe } from '@nestjs/common';
+import { CheckStockDto } from './dto/check-stock.dto';
 
+@ApiTags('Orders')
 @Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) { }
@@ -33,6 +36,13 @@ export class OrderController {
   @Public()
   createOnlineOrder(@Body() createOnlineOrderDto: CreateOnlineOrderDto) {
     return this.orderService.createOnlineOrder(createOnlineOrderDto);
+  }
+
+  @Post('check-stock')
+  @Public()
+  @ApiOperation({ summary: 'Check stock availability before creating order' })
+  checkStock(@Body() checkStockDto: CheckStockDto) {
+    return this.orderService.checkStockAvailability(checkStockDto.items);
   }
   @Get('count')
   async countOrders() {
