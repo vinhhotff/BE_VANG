@@ -13,6 +13,7 @@ import { CreateIngredientDto, UpdateIngredientDto } from './dto/create-ingredien
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { CreateMenuItemIngredientDto, UpdateMenuItemIngredientDto } from './dto/create-menu-item-ingredient.dto';
 import { CheckInventoryAvailabilityDto, ReserveInventoryDto, ReleaseInventoryDto, BulkReserveInventoryDto, CheckMultipleItemsAvailabilityDto } from './dto/inventory-check.dto';
+import { CheckTimeBasedStockDto, ReserveTimeBasedStockDto } from './dto/time-based-inventory.dto';
 import { Permission, User } from '../auth/decoration/setMetadata';
 import { IUser } from '../user/user.interface';
 
@@ -214,6 +215,105 @@ export class InventoryController {
     @Query('endDate') endDate: string,
   ) {
     return this.inventoryService.getReservationsInRange(startDate, endDate);
+  }
+
+  // ========== Time-Based Inventory Endpoints (Tồn kho tích lũy theo thời gian) ==========
+
+  /**
+   * Check availability based on time-based inventory logic
+   * 
+   * Công thức:
+   * - Gap_Days = Target_Date - Today
+   * - Total_Capacity = Gap_Days * Stock_Per_Day
+   * - Available_Stock = Total_Capacity - Current_Booked
+   */
+  @Post('check-time-based-availability')
+  checkTimeBasedAvailability(@Body() dto: CheckTimeBasedStockDto) {
+    return this.inventoryService.checkTimeBasedAvailability(dto);
+  }
+
+  /**
+   * Check single item time-based availability (quick check)
+   */
+  @Get('check-single-item-time-based')
+  checkSingleItemTimeBasedAvailability(
+    @Query('menuItemId') menuItemId: string,
+    @Query('targetDate') targetDate: string,
+    @Query('quantity') quantity: string,
+  ) {
+    return this.inventoryService.checkSingleItemTimeBasedAvailability(
+      menuItemId,
+      targetDate,
+      +quantity
+    );
+  }
+
+  /**
+   * Reserve inventory using time-based logic
+   */
+  @Post('reserve-time-based')
+  reserveTimeBasedInventory(@Body() dto: ReserveTimeBasedStockDto) {
+    return this.inventoryService.reserveTimeBasedInventory(dto);
+  }
+
+  /**
+   * Confirm time-based reservation
+   */
+  @Post('confirm-time-based')
+  confirmTimeBasedReservation(
+    @Query('menuItemId') menuItemId: string,
+    @Query('targetDate') targetDate: string,
+    @Query('quantity') quantity: string,
+    @Query('orderId') orderId?: string,
+  ) {
+    return this.inventoryService.confirmTimeBasedReservation(
+      menuItemId,
+      targetDate,
+      +quantity,
+      orderId
+    );
+  }
+
+  /**
+   * Release time-based reservation
+   */
+  @Post('release-time-based')
+  releaseTimeBasedReservation(
+    @Query('menuItemId') menuItemId: string,
+    @Query('targetDate') targetDate: string,
+    @Query('quantity') quantity: string,
+  ) {
+    return this.inventoryService.releaseTimeBasedReservation(
+      menuItemId,
+      targetDate,
+      +quantity
+    );
+  }
+
+  /**
+   * Get current Stock Per Day configuration
+   */
+  @Get('config/stock-per-day')
+  getStockPerDay() {
+    return { stockPerDay: this.inventoryService.getStockPerDay() };
+  }
+
+  /**
+   * Update Stock Per Day configuration
+   */
+  @Patch('config/stock-per-day')
+  @Permission('inventory:update')
+  updateStockPerDay(@Body('value') value: number) {
+    this.inventoryService.setStockPerDay(value);
+    return { stockPerDay: this.inventoryService.getStockPerDay() };
+  }
+
+  /**
+   * Get daily inventory stats for a specific date
+   */
+  @Get('daily-stats')
+  getDailyInventoryStats(@Query('date') date: string) {
+    return this.inventoryService.getDailyInventoryStats(date);
   }
 }
 

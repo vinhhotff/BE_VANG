@@ -15,6 +15,15 @@ import { CreateMenuItemIngredientDto, UpdateMenuItemIngredientDto } from './dto/
 import { IUser } from '../user/user.interface';
 import { CheckInventoryAvailabilityDto, ReserveInventoryDto, ReleaseInventoryDto, BulkReserveInventoryDto } from './dto/inventory-check.dto';
 import { MenuItem } from '../menu-item/schemas/menu-item.schema';
+import {
+  CheckTimeBasedStockDto,
+  ReserveTimeBasedStockDto,
+  TimeBasedStockCheckResult,
+  TimeBasedStockReservationResult,
+  TimeBasedInventoryConfig,
+  TIME_BASED_INVENTORY_CONFIG,
+  TimeBasedStockItemResult,
+} from './dto/time-based-inventory.dto';
 
 @Injectable()
 export class InventoryService {
@@ -725,6 +734,377 @@ export class InventoryService {
     .populate('menuItem', 'name price category dailyLimit')
     .sort({ date: 1 })
     .exec();
+  }
+
+  // ========== Time-Based Inventory (Tồn kho tích lũy theo thời gian) ==========
+
+  /**
+   * Lấy số ngày chờ (Gap_Days)
+   */
+  private calculateGapDays(targetDate: Date): number {
+    const today = this.getDateOnly(new Date());
+    const target = this.getDateOnly(targetDate);
+    const diffTime = target.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays); // Không âm
+  }
+
+  /**
+   * Tính toán tồn kho khả dụng dựa trên thời gian
+   * 
+   * Công thức:
+   * - Gap_Days = Target_Date - Today
+   * - Total_Capacity = Gap_Days * Stock_Per_Day
+   * - Available_Stock = Total_Capacity - Current_Booked
+   */
+  async checkTimeBasedAvailability(
+    dto: CheckTimeBasedStockDto
+  ): Promise<TimeBasedStockCheckResult> {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const targetDate = new Date(dto.targetDate);
+    
+    // Validate target date
+    if (isNaN(targetDate.getTime())) {
+      throw new BadRequestException('Invalid target date format. Use YYYY-MM-DD');
+    }
+
+    // Tính Gap_Days
+    const gapDays = this.calculateGapDays(targetDate);
+    
+    // Lấy Stock_Per_Day từ config
+    const stockPerDay = TimeBasedInventoryConfig.getInstance().getStockPerDay();
+    
+    // Tính Total_Capacity = Gap_Days * Stock_Per_Day
+    const totalCapacity = gapDays * stockPerDay;
+
+    // Kiểm tra nếu Target_Date là hôm nay hoặc quá khứ
+    if (gapDays === 0) {
+      // Hôm nay: không có thêm capacity mới
+      return {
+        success: false,
+        allAvailable: false,
+        targetDate: dto.targetDate,
+        today: todayStr,
+        stockPerDay,
+        items: [],
+        summary: {
+          totalRequested: 0,
+          totalAvailable: 0,
+          minAvailableStock: 0,
+        },
+        message: `Không thể đặt cho ngày hôm nay. Vui lòng đặt cho ngày mai hoặc muộn hơn.`,
+      };
+    }
+
+    // Kiểm tra từng menu item
+    const itemResults: TimeBasedStockItemResult[] = [];
+    let allAvailable = true;
+    let minAvailableStock = Infinity;
+    let totalRequested = 0;
+
+    for (const item of dto.items) {
+      // Lấy thông tin menu item
+      const menuItem = await this.menuItemModel.findById(item.menuItemId).exec();
+      if (!menuItem) {
+        throw new NotFoundException(`Menu item with ID ${item.menuItemId} not found`);
+      }
+
+      // Lấy Current_Booked từ daily reservation (chỉ tính confirmed + pending)
+      const dateOnly = this.getDateOnly(targetDate);
+      const reservation = await this.dailyReservationModel.findOne({
+        menuItem: item.menuItemId,
+        date: dateOnly,
+      }).exec();
+
+      const currentBooked = reservation 
+        ? reservation.totalReserved 
+        : 0;
+
+      // Tính Available_Stock = Total_Capacity - Current_Booked
+      const availableStock = Math.max(0, totalCapacity - currentBooked);
+      
+      // Kiểm tra availability
+      const isAvailable = item.quantity <= availableStock;
+      
+      if (!isAvailable) {
+        allAvailable = false;
+      }
+
+      if (availableStock < minAvailableStock) {
+        minAvailableStock = availableStock;
+      }
+
+      totalRequested += item.quantity;
+
+      itemResults.push({
+        menuItemId: item.menuItemId,
+        menuItemName: menuItem.name,
+        requestedQuantity: item.quantity,
+        gapDays,
+        totalCapacity,
+        currentBooked,
+        availableStock,
+        isAvailable,
+        message: isAvailable
+          ? `Có thể đặt ${item.quantity} phần (${availableStock} phần khả dụng)`
+          : `Yêu cầu ${item.quantity} phần nhưng chỉ còn ${availableStock} phần khả dụng`,
+      });
+    }
+
+    // Tạo message tổng hợp
+    let message: string;
+    if (allAvailable) {
+      message = `✓ Tất cả món đều có thể đặt cho ngày ${dto.targetDate}. ` +
+        `Tổng capacity: ${totalCapacity} phần, Đã book: ${itemResults.reduce((sum, i) => sum + i.currentBooked, 0)} phần.`;
+    } else {
+      const unavailableItems = itemResults.filter(i => !i.isAvailable);
+      message = `✗ Có ${unavailableItems.length} món không đủ stock:\n` +
+        unavailableItems.map(i => 
+          `• ${i.menuItemName}: Yêu cầu ${i.requestedQuantity}, Còn ${i.availableStock} phần (${i.currentBooked} đã book)`
+        ).join('\n');
+    }
+
+    return {
+      success: true,
+      allAvailable,
+      targetDate: dto.targetDate,
+      today: todayStr,
+      stockPerDay,
+      items: itemResults,
+      summary: {
+        totalRequested,
+        totalAvailable: itemResults.reduce((sum, i) => sum + i.availableStock, 0),
+        minAvailableStock: minAvailableStock === Infinity ? 0 : minAvailableStock,
+      },
+      message,
+    };
+  }
+
+  /**
+   * Kiểm tra nhanh cho 1 món đơn lẻ
+   * Tiện cho việc validate trước khi tạo order
+   */
+  async checkSingleItemTimeBasedAvailability(
+    menuItemId: string,
+    targetDate: string,
+    quantity: number
+  ): Promise<{
+    available: boolean;
+    gapDays: number;
+    totalCapacity: number;
+    currentBooked: number;
+    availableStock: number;
+    maxCanOrder: number;
+    message: string;
+  }> {
+    const result = await this.checkTimeBasedAvailability({
+      targetDate,
+      items: [{ menuItemId, quantity }],
+    });
+
+    if (result.items.length === 0) {
+      return {
+        available: false,
+        gapDays: 0,
+        totalCapacity: 0,
+        currentBooked: 0,
+        availableStock: 0,
+        maxCanOrder: 0,
+        message: result.message,
+      };
+    }
+
+    const item = result.items[0];
+    return {
+      available: item.isAvailable,
+      gapDays: item.gapDays,
+      totalCapacity: item.totalCapacity,
+      currentBooked: item.currentBooked,
+      availableStock: item.availableStock,
+      maxCanOrder: item.availableStock,
+      message: item.message,
+    };
+  }
+
+  /**
+   * Reserve tồn kho theo thời gian
+   * Gọi sau khi check và accept order
+   */
+  async reserveTimeBasedInventory(
+    dto: ReserveTimeBasedStockDto
+  ): Promise<TimeBasedStockReservationResult> {
+    // Đầu tiên kiểm tra availability
+    const checkResult = await this.checkTimeBasedAvailability(dto);
+    
+    if (!checkResult.allAvailable) {
+      return {
+        success: false,
+        reserved: false,
+        targetDate: dto.targetDate,
+        items: [],
+        message: checkResult.message,
+      };
+    }
+
+    // Thực hiện reserve cho từng item
+    const reservedItems: Array<{
+      menuItemId: string;
+      quantity: number;
+      newBooked: number;
+    }> = [];
+    const dateOnly = this.getDateOnly(dto.targetDate);
+
+    for (const item of dto.items) {
+      // Sử dụng upsert để tạo hoặc cập nhật reservation
+      const reservation = await this.dailyReservationModel.findOneAndUpdate(
+        {
+          menuItem: item.menuItemId,
+          date: dateOnly,
+        },
+        {
+          $inc: {
+            pendingCount: item.quantity,
+            totalReserved: item.quantity,
+          },
+          $setOnInsert: {
+            menuItem: item.menuItemId,
+            date: dateOnly,
+          },
+        },
+        {
+          new: true,
+          upsert: true,
+        }
+      ).exec();
+
+      // Track order ID nếu có
+      if (dto.orderId && reservation.orderIds) {
+        await this.dailyReservationModel.updateOne(
+          { _id: reservation._id },
+          { $addToSet: { orderIds: dto.orderId } }
+        );
+      }
+
+      reservedItems.push({
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        newBooked: reservation.totalReserved,
+      });
+    }
+
+    return {
+      success: true,
+      reserved: true,
+      targetDate: dto.targetDate,
+      items: reservedItems,
+      message: `Đã reserve thành công ${dto.items.reduce((sum, i) => sum + i.quantity, 0)} phần cho ngày ${dto.targetDate}`,
+    };
+  }
+
+  /**
+   * Confirm reservation (chuyển từ pending sang confirmed)
+   */
+  async confirmTimeBasedReservation(
+    menuItemId: string,
+    targetDate: string,
+    quantity: number,
+    orderId?: string
+  ): Promise<void> {
+    const dateOnly = this.getDateOnly(targetDate);
+    
+    await this.dailyReservationModel.findOneAndUpdate(
+      {
+        menuItem: menuItemId,
+        date: dateOnly,
+        pendingCount: { $gte: quantity },
+      },
+      {
+        $inc: {
+          pendingCount: -quantity,
+          confirmedCount: quantity,
+        },
+        ...(orderId ? { $addToSet: { orderIds: orderId } } : {}),
+      }
+    ).exec();
+  }
+
+  /**
+   * Release reservation (hủy bỏ pending reservation)
+   */
+  async releaseTimeBasedReservation(
+    menuItemId: string,
+    targetDate: string,
+    quantity: number
+  ): Promise<void> {
+    const dateOnly = this.getDateOnly(targetDate);
+    
+    await this.dailyReservationModel.findOneAndUpdate(
+      {
+        menuItem: menuItemId,
+        date: dateOnly,
+        pendingCount: { $gte: quantity },
+      },
+      {
+        $inc: {
+          pendingCount: -quantity,
+          totalReserved: -quantity,
+        },
+      }
+    ).exec();
+  }
+
+  /**
+   * Lấy cấu hình Stock Per Day hiện tại
+   */
+  getStockPerDay(): number {
+    return TimeBasedInventoryConfig.getInstance().getStockPerDay();
+  }
+
+  /**
+   * Cập nhật cấu hình Stock Per Day
+   */
+  setStockPerDay(value: number): void {
+    TimeBasedInventoryConfig.getInstance().setStockPerDay(value);
+  }
+
+  /**
+   * Lấy thống kê tồn kho cho 1 ngày
+   */
+  async getDailyInventoryStats(date: string): Promise<{
+    date: string;
+    totalItems: number;
+    totalReserved: number;
+    totalConfirmed: number;
+    totalPending: number;
+    items: Array<{
+      menuItemId: string;
+      menuItemName: string;
+      reserved: number;
+      confirmed: number;
+      pending: number;
+    }>;
+  }> {
+    const dateOnly = this.getDateOnly(date);
+    
+    const reservations = await this.dailyReservationModel.find({
+      date: dateOnly,
+    }).populate('menuItem', 'name').exec();
+
+    return {
+      date,
+      totalItems: reservations.length,
+      totalReserved: reservations.reduce((sum, r) => sum + r.totalReserved, 0),
+      totalConfirmed: reservations.reduce((sum, r) => sum + r.confirmedCount, 0),
+      totalPending: reservations.reduce((sum, r) => sum + r.pendingCount, 0),
+      items: reservations.map(r => ({
+        menuItemId: r.menuItem.toString(),
+        menuItemName: (r.menuItem as any)?.name || 'Unknown',
+        reserved: r.totalReserved,
+        confirmed: r.confirmedCount,
+        pending: r.pendingCount,
+      })),
+    };
   }
 }
 
