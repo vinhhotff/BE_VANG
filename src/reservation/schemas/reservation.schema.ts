@@ -64,6 +64,18 @@ export class Reservation extends Document {
   @Prop({ type: String, enum: ReservationStatus, default: ReservationStatus.PENDING })
   status: ReservationStatus;
 
+  /** Thời điểm khách đến (markArrived) — cũng là lúc trừ stock */
+  @Prop({ type: Date })
+  arrivedAt?: Date;
+
+  /** Thời điểm khách ngồi vào bàn (markSeated) */
+  @Prop({ type: Date })
+  seatedAt?: Date;
+
+  /** Thời điểm hoàn thành (markCompleted) */
+  @Prop({ type: Date })
+  completedAt?: Date;
+
   @Prop()
   tableNumber?: string;
 
@@ -221,6 +233,9 @@ export interface IReservation {
   numberOfGuests: number;
   specialRequests?: string;
   status: ReservationStatus;
+  arrivedAt?: Date;
+  seatedAt?: Date;
+  completedAt?: Date;
   tableNumber?: string;
   table?: Types.ObjectId;
   notes?: string;

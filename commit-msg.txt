@@ -1,4 +1,12 @@
-feat(reservation): open findByPhone endpoint (remove auth guard)
+feat(reservation): deduct stock on arrived + daily table reset
 
-- Remove JwtAuthGuard from GET /reservations/phone/:phone
-- Users can now check their reservation status without login
+Stock (ingredient-level):
+- Confirm ingredient inventory when marking customer ARRIVED
+  (moves pending → confirmed, deducts real stock from Ingredient.currentStock)
+- Added arrivedAt / seatedAt / completedAt timestamps to reservation schema
+
+Daily table reset:
+- New scheduler job runs at 00:05 daily: reset 'reserved' tables
+  that have no active reservation for today → back to 'available'
+- 'maintenance' tables are never reset
+- Existing 48h expiry job still runs every hour as before

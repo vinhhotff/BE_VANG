@@ -277,7 +277,7 @@ export class ReservationService {
     }
 
     const reservation = await this.reservationModel
-      .findByIdAndUpdate(id, updateStatusDto, { new: true })
+      .findById(id)
       .populate('user', 'name email')
       .exec();
 
@@ -285,7 +285,53 @@ export class ReservationService {
       throw new NotFoundException('Không tìm thấy đặt bàn');
     }
 
-    return reservation;
+    const prevStatus = reservation.status;
+    const nextStatus = updateStatusDto.status;
+
+    // === Stock deduction when customer arrives ===
+    if (
+      nextStatus === ReservationStatus.ARRIVED &&
+      prevStatus !== ReservationStatus.ARRIVED
+    ) {
+      reservation.arrivedAt = new Date();
+
+      // Confirm ingredient inventory for each menu item (this deducts real stock)
+      if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+        const usageDate = new Date(reservation.usageDate);
+        for (const item of reservation.items) {
+          try {
+            await this.inventoryService.confirmIngredientReservation(
+              item.item.toString(),
+              item.quantity,
+              usageDate,
+              reservation._id.toString(),
+            );
+          } catch (error) {
+            console.error('Failed to confirm ingredient reservation:', error);
+          }
+        }
+      }
+    }
+
+    // === Record seated time ===
+    if (
+      nextStatus === ReservationStatus.SEATED &&
+      prevStatus !== ReservationStatus.SEATED
+    ) {
+      reservation.seatedAt = new Date();
+    }
+
+    // === Record completed time ===
+    if (
+      nextStatus === ReservationStatus.COMPLETED &&
+      prevStatus !== ReservationStatus.COMPLETED
+    ) {
+      reservation.completedAt = new Date();
+    }
+
+    // Update the status
+    reservation.status = nextStatus;
+    return reservation.save();
   }
 
   async cancel(id: string, userId?: string): Promise<Reservation> {
