@@ -297,4 +297,20 @@ export class ReservationController {
   ) {
     return this.reservationService.cancelConfirmedReservation(id, dto, user);
   }
+
+  /**
+   * Admin confirms reservation directly without PayOS deposit.
+   * Used for walk-in / VIP / waived-deposit reservations.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:confirmWithoutDeposit')
+  @CustomMessage('Xác nhận đặt bàn không đặt cọc')
+  @Post(':id/confirm-without-deposit')
+  confirmWithoutDeposit(
+    @Param('id') id: string,
+    @Body() dto: { adminNotes?: string },
+    @User() user: IUser,
+  ) {
+    return this.reservationService.confirmWithoutDeposit(id, dto, user);
+  }
 }

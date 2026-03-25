@@ -1418,4 +1418,125 @@ export class ReservationService {
       year: 'numeric',
     });
   }
+
+  // ========== Admin Direct Confirm (No Deposit) ==========
+
+  /**
+   * Admin directly confirms a reservation without requiring PayOS deposit.
+   * Used for walk-in or VIP reservations where deposit is waived.
+   */
+  async confirmWithoutDeposit(
+    reservationId: string,
+    dto: { adminNotes?: string },
+    user: IUser,
+  ): Promise<Reservation> {
+    const reservation = await this.findById(reservationId);
+
+    // Only PENDING or PENDING_APPROVAL (already approved) reservations can be confirmed this way
+    if (
+      reservation.status !== ReservationStatus.PENDING &&
+      reservation.status !== ReservationStatus.PENDING_APPROVAL
+    ) {
+      throw new BadRequestException(
+        `Không thể xác nhận đặt bàn ở trạng thái "${reservation.status}". Chỉ đặt bàn đang chờ xác nhận mới có thể xác nhận trực tiếp.`,
+      );
+    }
+
+    if (reservation.isDepositPaid) {
+      throw new BadRequestException('Đặt bàn này đã được xác nhận đặt cọc trước đó.');
+    }
+
+    // Atomic table lock check
+    if (reservation.table) {
+      const tableId =
+        reservation.table instanceof Types.ObjectId
+          ? reservation.table.toString()
+          : (reservation.table as any)._id?.toString() || String(reservation.table);
+
+      const { start, end } = this.getTimeWindow(reservation.reservationDate);
+
+      const conflicting = await this.reservationModel
+        .findOne({
+          _id: { $ne: reservation._id },
+          table: reservation.table,
+          reservationDate: { $gte: start, $lte: end },
+          status: ReservationStatus.CONFIRMED,
+          isDepositPaid: true,
+        })
+        .exec();
+
+      if (conflicting) {
+        throw new ConflictException(
+          'Bàn này đã được xác nhận bởi đặt bàn khác trong khung giờ này.',
+        );
+      }
+
+      try {
+        await this.tableService.updateTableStatus(tableId, 'reserved');
+      } catch (error) {
+        throw new ConflictException('Bàn không còn khả dụng.');
+      }
+    }
+
+    // Confirm inventory if there are items
+    if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+      for (const item of reservation.items) {
+        try {
+          await this.inventoryService.confirmIngredientReservation(
+            item.item.toString(),
+            item.quantity,
+            reservation.usageDate,
+            reservation._id.toString(),
+          );
+        } catch (error) {
+          console.error('Failed to confirm inventory:', error);
+        }
+      }
+    }
+
+    // Record audit trail
+    this.addStatusHistory(
+      reservation,
+      ReservationStatus.CONFIRMED,
+      'admin',
+      user,
+      'Xác nhận trực tiếp (không đặt cọc)',
+      dto.adminNotes,
+    );
+
+    // Capture original status before updating
+    const wasPendingApproval = reservation.status === ReservationStatus.PENDING_APPROVAL;
+
+    // Update reservation
+    reservation.isDepositPaid = true;
+    reservation.depositPaid = 0;
+    reservation.depositPaymentMethod = 'ADMIN_DIRECT';
+    reservation.depositPaidAt = new Date();
+    reservation.status = ReservationStatus.CONFIRMED;
+
+    if (wasPendingApproval) {
+      reservation.approvalStatus = ApprovalStatus.APPROVED;
+      reservation.approvedAt = new Date();
+      reservation.approvedBy = new Types.ObjectId(user._id.toString());
+    }
+
+    const savedReservation = await reservation.save();
+
+    // Notify customer
+    try {
+      await this.notificationService.sendToUser(reservation.customerPhone, {
+        type: 'RESERVATION_CONFIRMED',
+        title: 'Đặt bàn xác nhận thành công',
+        message: `Đặt bàn ngày ${this.formatDate(reservation.reservationDate)} lúc ${reservation.reservationTime} đã được xác nhận bởi nhà hàng. Không cần đặt cọc. Cảm ơn bạn!`,
+        data: {
+          reservationId: reservation._id.toString(),
+          depositAmount: 0,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to send confirmation notification:', error);
+    }
+
+    return savedReservation;
+  }
 }

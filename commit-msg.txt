@@ -1,12 +1,8 @@
-feat(reservation): add cancel-confirmed flow with refund tracking and audit trail
+feat(reservation): add confirmWithoutDeposit for admin direct confirmation
 
-- Add RefundStatus enum (PENDING/PROCESSING/COMPLETED/FAILED/NOT_REQUESTED)
-- Add refund fields to Reservation: refundAmount, refundRequestedAt, refundReason, etc.
-- Add statusHistory array for full audit trail on every status change
-- Add NotificationType: RESERVATION_ADMIN_CANCELLED, RESERVATION_REFUND_*, RESERVATION_DEPOSIT_PAID
-- Add cancelConfirmedReservation() method: handles refund, releases inventory, releases table, notifies customer
-- Fix confirmDeposit(): atomic table lock (moved from createFullBooking), idempotency check, fixes double-deduction bug
-- Fix rejectReservation(): releases inventory on rejection
-- Add POST /reservations/:id/cancel-confirmed endpoint
-- Fix: Add refund fields + statusHistory to reservation schema
-- Fix: Expand NotificationPayload with refundStatus, refundAmount, priority fields
+- Add POST /reservations/:id/confirm-without-deposit endpoint
+- confirmWithoutDeposit(): admin confirms reservation without PayOS deposit
+- Locks table atomically, confirms inventory, sets depositPaid = 0
+- Sends RESERVATION_CONFIRMED notification to customer
+- Works for PENDING and PENDING_APPROVAL status reservations
+- Frontend: add "Xác nhận không đặt cọc" green button in detail modal
