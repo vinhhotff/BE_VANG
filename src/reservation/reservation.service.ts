@@ -206,7 +206,7 @@ export class ReservationService {
     date?: string
   ): Promise<{ reservations: Reservation[]; total: number; totalPages: number }> {
     const filter: any = {};
-    
+
     if (status) filter.status = status;
     if (date) {
       // Parse YYYY-MM-DD as local date to avoid timezone offset issues
@@ -230,6 +230,7 @@ export class ReservationService {
       .find(filter)
       .populate('user', 'name email')
       .populate('table', 'tableName location status capacity')
+      .populate('items.item', 'name price category image images description')
       .sort({ reservationDate: 1 })
       .skip(skip)
       .limit(limit)
@@ -247,7 +248,7 @@ export class ReservationService {
       .findById(id)
       .populate('user', 'name email')
       .populate('table', 'tableName location status capacity')
-      .populate('items.item', 'name price category image description')
+      .populate('items.item', 'name price category image images description')
       .exec();
 
     if (!reservation) {
@@ -264,6 +265,7 @@ export class ReservationService {
 
     return this.reservationModel
       .find({ user: userId })
+      .populate('items.item', 'name price category image images description')
       .sort({ reservationDate: -1 })
       .exec();
   }
@@ -273,6 +275,7 @@ export class ReservationService {
       .find({ customerPhone: phone })
       .populate('user', 'name email')
       .populate('table', 'tableName location status capacity')
+      .populate('items.item', 'name price category image images description')
       .sort({ reservationDate: -1 })
       .exec();
   }
@@ -285,6 +288,7 @@ export class ReservationService {
     const reservation = await this.reservationModel
       .findById(id)
       .populate('user', 'name email')
+      .populate('items.item', 'name price category image images description')
       .exec();
 
     if (!reservation) {
@@ -384,6 +388,7 @@ export class ReservationService {
       })
       .populate('user', 'name email')
       .populate('table', 'tableName location status capacity')
+      .populate('items.item', 'name price category image images description')
       .sort({ reservationDate: 1 })
       .exec();
   }
@@ -399,6 +404,7 @@ export class ReservationService {
       })
       .populate('user', 'name email')
       .populate('table', 'tableName location status capacity')
+      .populate('items.item', 'name price category image images description')
       .sort({ reservationDate: 1 })
       .exec();
   }
@@ -664,7 +670,7 @@ export class ReservationService {
           quantity: item.quantity,
         }));
         const inventoryResult = await this.inventoryService.bulkReserveInventory(bulkItems, dateStr, savedReservation._id.toString());
-        
+
         // If inventory reservation failed, delete reservation and throw error
         if (!inventoryResult.success) {
           await this.reservationModel.findByIdAndDelete(savedReservation._id);
@@ -857,8 +863,8 @@ export class ReservationService {
     // Release table if table was reserved
     if (reservation.table) {
       try {
-        const tableId = reservation.table instanceof Types.ObjectId 
-          ? reservation.table.toString() 
+        const tableId = reservation.table instanceof Types.ObjectId
+          ? reservation.table.toString()
           : (reservation.table as any)._id?.toString() || String(reservation.table);
         await this.tableService.updateTableStatus(tableId, 'available');
       } catch (error) {
@@ -884,7 +890,7 @@ export class ReservationService {
   }> {
     const targetDate = new Date(date);
     const timeSlots: string[] = [];
-    
+
     // Generate time slots from 10:00 to 21:00 (last order at 21:00)
     const startHour = 10;
     const endHour = 21;
@@ -892,7 +898,7 @@ export class ReservationService {
     for (let hour = startHour; hour <= endHour; hour++) {
       const timeStr = `${hour.toString().padStart(2, '0')}:00`;
       const availability = await this.checkTableAvailability(date, timeStr, numberOfGuests);
-      
+
       if (availability.available) {
         timeSlots.push(timeStr);
       }
@@ -901,7 +907,7 @@ export class ReservationService {
     return {
       date,
       timeSlots,
-      message: timeSlots.length > 0 
+      message: timeSlots.length > 0
         ? `Còn ${timeSlots.length} khung giờ trống`
         : 'Không có khung giờ nào trống trong ngày này',
     };
@@ -989,15 +995,15 @@ export class ReservationService {
           quantity: item.quantity,
         }));
         const inventoryResult = await this.inventoryService.bulkReserveInventory(
-          bulkItems, 
-          dateStr, 
+          bulkItems,
+          dateStr,
           reservation._id.toString()
         );
-        
+
         if (!inventoryResult.success) {
           const failedItems = inventoryResult.results.filter(r => !r.success);
           const errorMessage = failedItems.map(r => r.message).join(', ');
-          
+
           // Send notification to customer about inventory issue
           try {
             await this.notificationService.sendToUser(reservation.customerPhone, {
@@ -1009,7 +1015,7 @@ export class ReservationService {
           } catch (notifError) {
             console.error('Failed to send inventory failure notification:', notifError);
           }
-          
+
           throw new BadRequestException(
             `Không thể xác nhận đơn hàng do: ${errorMessage}`
           );
