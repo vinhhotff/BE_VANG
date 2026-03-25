@@ -104,6 +104,61 @@ export class ReservationController {
     return this.reservationService.findByPhone(phone);
   }
 
+  /**
+   * Phải khai báo TRƯỚC @Get(':id') — nếu không "my-bookings" bị hiểu là id → 400 "ID không hợp lệ".
+   */
+  @Public()
+  @Get('my-bookings')
+  getMyBookings(@Query('phone') phone: string) {
+    return this.reservationService.getMyBookings(phone);
+  }
+
+  @Public()
+  @Get('available-tables')
+  checkTableAvailability(
+    @Query('date') date: string,
+    @Query('time') time: string,
+    @Query('guests') guests: string,
+  ) {
+    return this.reservationService.checkTableAvailability(date, time, +guests);
+  }
+
+  @Public()
+  @Get('time-slots')
+  getAvailableTimeSlots(
+    @Query('date') date: string,
+    @Query('guests') guests: string,
+  ) {
+    return this.reservationService.getAvailableTimeSlots(date, +guests);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:getPendingApprovals')
+  @CustomMessage('Lấy danh sách chờ phê duyệt')
+  @Get('pending-approvals')
+  getPendingApprovals(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+  ) {
+    return this.reservationService.getPendingApprovals(+page, +limit);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:getApprovalStats')
+  @CustomMessage('Lấy thống kê phê duyệt')
+  @Get('approval-stats')
+  getApprovalStats() {
+    return this.reservationService.getApprovalStats();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:getApprovalSettings')
+  @CustomMessage('Lấy cấu hình phê duyệt')
+  @Get('approval-settings')
+  getApprovalSettings() {
+    return this.reservationService.getApprovalSettings();
+  }
+
   @UseGuards(JwtAuthGuard)
   @Permission('reservation:findOne')
   @CustomMessage('Lấy đặt bàn theo ID')
@@ -162,31 +217,7 @@ export class ReservationController {
   }
 
   // ========== Integrated Booking Endpoints ==========
-
-  /**
-   * Check available tables for date/time
-   */
-  @Public()
-  @Get('available-tables')
-  checkTableAvailability(
-    @Query('date') date: string,
-    @Query('time') time: string,
-    @Query('guests') guests: string,
-  ) {
-    return this.reservationService.checkTableAvailability(date, time, +guests);
-  }
-
-  /**
-   * Get available time slots for a date
-   */
-  @Public()
-  @Get('time-slots')
-  getAvailableTimeSlots(
-    @Query('date') date: string,
-    @Query('guests') guests: string,
-  ) {
-    return this.reservationService.getAvailableTimeSlots(date, +guests);
-  }
+  // GET available-tables, time-slots, my-bookings đã khai báo phía trên (trước @Get(':id')).
 
   /**
    * Create full booking (table + menu items + deposit)
@@ -210,15 +241,6 @@ export class ReservationController {
   }
 
   /**
-   * Get customer's bookings by phone
-   */
-  @Public()
-  @Get('my-bookings')
-  getMyBookings(@Query('phone') phone: string) {
-    return this.reservationService.getMyBookings(phone);
-  }
-
-  /**
    * Cancel full booking
    */
   @Public()
@@ -228,31 +250,7 @@ export class ReservationController {
   }
 
   // ========== Bulk Order Approval Endpoints ==========
-
-  /**
-   * Get pending approval requests (admin only)
-   */
-  @UseGuards(JwtAuthGuard)
-  @Permission('reservation:getPendingApprovals')
-  @CustomMessage('Lấy danh sách chờ phê duyệt')
-  @Get('pending-approvals')
-  getPendingApprovals(
-    @Query('page') page: string = '1',
-    @Query('limit') limit: string = '10',
-  ) {
-    return this.reservationService.getPendingApprovals(+page, +limit);
-  }
-
-  /**
-   * Get approval statistics (admin only)
-   */
-  @UseGuards(JwtAuthGuard)
-  @Permission('reservation:getApprovalStats')
-  @CustomMessage('Lấy thống kê phê duyệt')
-  @Get('approval-stats')
-  getApprovalStats() {
-    return this.reservationService.getApprovalStats();
-  }
+  // GET pending-approvals, approval-stats, approval-settings đã khai báo phía trên.
 
   /**
    * Approve a reservation (admin only)
@@ -282,17 +280,6 @@ export class ReservationController {
     @User() user: IUser,
   ) {
     return this.reservationService.rejectReservation(id, rejectDto, user);
-  }
-
-  /**
-   * Get approval settings (admin only)
-   */
-  @UseGuards(JwtAuthGuard)
-  @Permission('reservation:getApprovalSettings')
-  @CustomMessage('Lấy cấu hình phê duyệt')
-  @Get('approval-settings')
-  getApprovalSettings() {
-    return this.reservationService.getApprovalSettings();
   }
 
   /**

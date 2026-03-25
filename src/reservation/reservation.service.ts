@@ -207,10 +207,13 @@ export class ReservationService {
     
     if (status) filter.status = status;
     if (date) {
-      const searchDate = new Date(date);
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
       filter.reservationDate = {
-        $gte: new Date(searchDate.setHours(0, 0, 0, 0)),
-        $lt: new Date(searchDate.setHours(23, 59, 59, 999)),
+        $gte: startOfDay,
+        $lte: endOfDay,
       };
     }
 
