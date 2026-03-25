@@ -209,10 +209,13 @@ export class ReservationService {
     
     if (status) filter.status = status;
     if (date) {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      // Parse YYYY-MM-DD as local date to avoid timezone offset issues
+      const parts = date.split('-');
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1; // JS months are 0-indexed
+      const day = parseInt(parts[2], 10);
+      const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+      const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
       filter.reservationDate = {
         $gte: startOfDay,
         $lte: endOfDay,
@@ -446,7 +449,12 @@ export class ReservationService {
     availableTables: any[];
     message: string;
   }> {
-    const reservationDate = new Date(date);
+    // Parse YYYY-MM-DD as local date to avoid timezone offset
+    const parts = date.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const reservationDate = new Date(year, month, day, 0, 0, 0, 0);
     const [hours, minutes] = time.split(':').map(Number);
     reservationDate.setHours(hours, minutes, 0, 0);
 
