@@ -96,11 +96,23 @@ export class ReservationService {
       createReservationDto.reservationTime,
     );
 
+    // Resolve tableNumber → table ObjectId for proper populate
+    let tableId: Types.ObjectId | undefined;
+    if (createReservationDto.tableNumber) {
+      const table = await this.tableModel.findOne({
+        tableName: createReservationDto.tableNumber,
+      }).exec();
+      if (table) {
+        tableId = table._id as Types.ObjectId;
+      }
+    }
+
     const reservation = new this.reservationModel({
       ...createReservationDto,
       user: user._id,
       reservationDate,
       reservationTime,
+      table: tableId,
     });
 
     return reservation.save();
@@ -134,21 +146,27 @@ export class ReservationService {
 
     // Kiểm tra nếu có chọn bàn, check xem bàn đã được đặt chưa
     if (createReservationDto.tableNumber) {
-      const tableReservation = await this.reservationModel
-        .findOne({
-          tableNumber: createReservationDto.tableNumber,
-          reservationDate: {
-            $gte: start,
-            $lte: end,
-          },
-          status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
-        })
-        .exec();
+      // Resolve to ObjectId for proper query
+      const table = await this.tableModel.findOne({
+        tableName: createReservationDto.tableNumber,
+      }).exec();
+      if (table) {
+        const tableReservation = await this.reservationModel
+          .findOne({
+            table: table._id,
+            reservationDate: {
+              $gte: start,
+              $lte: end,
+            },
+            status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
+          })
+          .exec();
 
-      if (tableReservation) {
-        throw new ConflictException(
-          `Bàn ${createReservationDto.tableNumber} đã được đặt trong khoảng thời gian này. Vui lòng chọn bàn khác.`
-        );
+        if (tableReservation) {
+          throw new ConflictException(
+            `Bàn ${createReservationDto.tableNumber} đã được đặt trong khoảng thời gian này. Vui lòng chọn bàn khác.`
+          );
+        }
       }
     }
 
@@ -157,10 +175,22 @@ export class ReservationService {
       createReservationDto.reservationTime,
     );
 
+    // Resolve tableNumber → table ObjectId for proper populate
+    let tableId: Types.ObjectId | undefined;
+    if (createReservationDto.tableNumber) {
+      const table = await this.tableModel.findOne({
+        tableName: createReservationDto.tableNumber,
+      }).exec();
+      if (table) {
+        tableId = table._id as Types.ObjectId;
+      }
+    }
+
     const reservation = new this.reservationModel({
       ...createReservationDto,
       reservationDate,
       reservationTime,
+      table: tableId,
       // user field is optional, không cần set cho public reservations
     });
 
@@ -191,6 +221,7 @@ export class ReservationService {
     const reservations = await this.reservationModel
       .find(filter)
       .populate('user', 'name email')
+      .populate('table', 'tableName location status capacity')
       .sort({ reservationDate: 1 })
       .skip(skip)
       .limit(limit)
@@ -207,6 +238,7 @@ export class ReservationService {
     const reservation = await this.reservationModel
       .findById(id)
       .populate('user', 'name email')
+      .populate('table', 'tableName location status capacity')
       .exec();
 
     if (!reservation) {
@@ -231,6 +263,7 @@ export class ReservationService {
     return this.reservationModel
       .find({ customerPhone: phone })
       .populate('user', 'name email')
+      .populate('table', 'tableName location status capacity')
       .sort({ reservationDate: -1 })
       .exec();
   }
@@ -285,6 +318,7 @@ export class ReservationService {
         status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
       })
       .populate('user', 'name email')
+      .populate('table', 'tableName location status capacity')
       .sort({ reservationDate: 1 })
       .exec();
   }
@@ -299,6 +333,7 @@ export class ReservationService {
         status: { $in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] }
       })
       .populate('user', 'name email')
+      .populate('table', 'tableName location status capacity')
       .sort({ reservationDate: 1 })
       .exec();
   }
