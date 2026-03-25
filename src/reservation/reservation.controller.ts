@@ -94,8 +94,9 @@ export class ReservationController {
     return this.reservationService.findByUser(user._id.toString());
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Permission('reservation:findByPhone')
+  /**
+   * Get reservations by phone number (public — no auth required)
+   */
   @CustomMessage('Lấy đặt bàn theo số điện thoại')
   @Get('phone/:phone')
   findByPhone(@Param('phone') phone: string) {

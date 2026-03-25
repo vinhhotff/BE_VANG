@@ -1,8 +1,4 @@
-feat(reservation): add confirmWithoutDeposit for admin direct confirmation
+feat(reservation): open findByPhone endpoint (remove auth guard)
 
-- Add POST /reservations/:id/confirm-without-deposit endpoint
-- confirmWithoutDeposit(): admin confirms reservation without PayOS deposit
-- Locks table atomically, confirms inventory, sets depositPaid = 0
-- Sends RESERVATION_CONFIRMED notification to customer
-- Works for PENDING and PENDING_APPROVAL status reservations
-- Frontend: add "Xác nhận không đặt cọc" green button in detail modal
+- Remove JwtAuthGuard from GET /reservations/phone/:phone
+- Users can now check their reservation status without login
