@@ -9,6 +9,7 @@ import { MenuItem, MenuItemSchema } from '../menu-item/schemas/menu-item.schema'
 import { InventoryModule } from '../inventory/inventory.module';
 import { NotificationModule } from '../notification/notification.module';
 import { TableModule } from '../table/table.module';
+import { MenuItemModule } from '../menu-item/menu-item.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { TableModule } from '../table/table.module';
     InventoryModule,
     NotificationModule,
     TableModule,
+    MenuItemModule,
   ],
   controllers: [ReservationController],
   providers: [ReservationService, ReservationScheduler],

@@ -11,6 +11,7 @@ import { InventoryService } from '../inventory/inventory.service';
 import { ApprovalConfig, BULK_ORDER_CONFIG } from './config/approval.config';
 import { NotificationService } from '../notification/notification.service';
 import { TableService } from '../table/table.service';
+import { MenuItemService } from '../menu-item/menu-item.service';
 
 @Injectable()
 export class ReservationService {
@@ -25,6 +26,7 @@ export class ReservationService {
     private readonly inventoryService: InventoryService,
     private readonly notificationService: NotificationService,
     private readonly tableService: TableService,
+    private readonly menuItemService: MenuItemService,
   ) {
     this.approvalConfig = ApprovalConfig.getInstance();
   }
@@ -295,19 +297,29 @@ export class ReservationService {
     ) {
       reservation.arrivedAt = new Date();
 
-      // Confirm ingredient inventory for each menu item (this deducts real stock)
-      if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
-        const usageDate = new Date(reservation.usageDate);
-        for (const item of reservation.items) {
-          try {
-            await this.inventoryService.confirmIngredientReservation(
-              item.item.toString(),
-              item.quantity,
-              usageDate,
-              reservation._id.toString(),
-            );
-          } catch (error) {
-            console.error('Failed to confirm ingredient reservation:', error);
+      if (reservation.items && reservation.items.length > 0) {
+        // 1) MenuItem.stock + soldCount (field trên document món — admin thường xem chỗ này)
+        for (const line of reservation.items) {
+          await this.menuItemService.deductStock(
+            line.item.toString(),
+            line.quantity,
+          );
+        }
+
+        // 2) Nguyên liệu (ingredient) — pending → confirmed + trừ tồn kho nguyên liệu nếu có link
+        if (reservation.usageDate) {
+          const usageDate = new Date(reservation.usageDate);
+          for (const line of reservation.items) {
+            try {
+              await this.inventoryService.confirmIngredientReservation(
+                line.item.toString(),
+                line.quantity,
+                usageDate,
+                reservation._id.toString(),
+              );
+            } catch (error) {
+              console.error('Failed to confirm ingredient reservation:', error);
+            }
           }
         }
       }

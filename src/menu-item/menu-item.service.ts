@@ -317,8 +317,11 @@ export class MenuItemService {
       throw new NotFoundException('Menu item not found');
     }
 
-    // null stock = unlimited, no deduction needed
+    // null stock = unlimited — không trừ stock nhưng vẫn ghi nhận đã bán (đặt bàn / order)
     if (menuItem.stock === null || menuItem.stock === undefined) {
+      await this.menuItemModel.findByIdAndUpdate(menuItemId, {
+        $inc: { soldCount: quantity },
+      });
       return;
     }
 
