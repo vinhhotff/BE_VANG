@@ -35,6 +35,7 @@ export class CreateReservationDto {
   @IsString()
   reservationTime?: string;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   @Max(20)

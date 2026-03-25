@@ -36,6 +36,15 @@ export class ReservationService {
     return { start, end };
   }
 
+  /** Schema yêu cầu reservationTime; public API thường chỉ gửi reservationDate (ISO). */
+  private resolveReservationTime(reservationDate: Date, explicit?: string): string {
+    const t = explicit?.trim();
+    if (t) return t;
+    const h = reservationDate.getHours();
+    const m = reservationDate.getMinutes();
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
   async create(createReservationDto: CreateReservationDto, user: IUser): Promise<Reservation> {
     const reservationDate = new Date(createReservationDto.reservationDate);
 
@@ -82,10 +91,16 @@ export class ReservationService {
       }
     }
 
+    const reservationTime = this.resolveReservationTime(
+      reservationDate,
+      createReservationDto.reservationTime,
+    );
+
     const reservation = new this.reservationModel({
       ...createReservationDto,
       user: user._id,
       reservationDate,
+      reservationTime,
     });
 
     return reservation.save();
@@ -137,9 +152,15 @@ export class ReservationService {
       }
     }
 
+    const reservationTime = this.resolveReservationTime(
+      reservationDate,
+      createReservationDto.reservationTime,
+    );
+
     const reservation = new this.reservationModel({
       ...createReservationDto,
       reservationDate,
+      reservationTime,
       // user field is optional, không cần set cho public reservations
     });
 
