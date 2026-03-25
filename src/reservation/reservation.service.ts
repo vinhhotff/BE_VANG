@@ -566,6 +566,9 @@ export class ReservationService {
         if (!menuItem.available) {
           throw new BadRequestException(`Món ${menuItem.name} hiện không có sẵn`);
         }
+        if (menuItem.stock !== null && menuItem.stock !== undefined && menuItem.stock < item.quantity) {
+          throw new BadRequestException(`Không đủ số lượng cho món '${menuItem.name}'. Kho còn: ${menuItem.stock}, Khách chọn: ${item.quantity}`);
+        }
 
         const subtotal = menuItem.price * item.quantity;
         validatedItems.push({
