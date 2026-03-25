@@ -6,8 +6,11 @@ export enum ReservationStatus {
   PENDING = 'pending',
   PENDING_APPROVAL = 'pending_approval', // Chờ phê duyệt (đơn hàng lớn)
   CONFIRMED = 'confirmed',
+  ARRIVED = 'arrived',      // Khách đã đến
+  SEATED = 'seated',        // Khách đã ngồi vào bàn
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  NO_SHOW = 'no_show',
 }
 
 export enum ApprovalStatus {

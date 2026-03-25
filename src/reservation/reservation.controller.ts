@@ -97,6 +97,7 @@ export class ReservationController {
   /**
    * Get reservations by phone number (public — no auth required)
    */
+  @Public()
   @CustomMessage('Lấy đặt bàn theo số điện thoại')
   @Get('phone/:phone')
   findByPhone(@Param('phone') phone: string) {
@@ -136,6 +137,28 @@ export class ReservationController {
   @Delete(':id')
   adminCancel(@Param('id') id: string) {
     return this.reservationService.cancel(id);
+  }
+
+  /**
+   * Mark reservation as arrived (admin)
+   */
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:updateStatus')
+  @CustomMessage('Đánh dấu khách đã đến')
+  @Patch(':id/arrived')
+  markArrived(@Param('id') id: string) {
+    return this.reservationService.updateStatus(id, { status: ReservationStatus.ARRIVED });
+  }
+
+  /**
+   * Mark reservation as seated (admin)
+   */
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:updateStatus')
+  @CustomMessage('Đánh dấu khách đã ngồi vào bàn')
+  @Patch(':id/seated')
+  markSeated(@Param('id') id: string) {
+    return this.reservationService.updateStatus(id, { status: ReservationStatus.SEATED });
   }
 
   // ========== Integrated Booking Endpoints ==========
