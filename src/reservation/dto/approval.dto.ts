@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsNumber, Min, IsBoolean, IsNotEmpty } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum ApprovalAction {
@@ -18,7 +18,18 @@ export class ApproveReservationDto {
 
 export class RejectReservationDto {
   @IsString()
+  @IsNotEmpty()
   reason: string;
+}
+
+export class CancelConfirmedDto {
+  @IsString()
+  @IsNotEmpty()
+  reason: string;
+
+  @IsBoolean()
+  @IsOptional()
+  requestRefund?: boolean; // default: true for confirmed reservations with deposit
 }
 
 export class ApprovalQueryDto {

@@ -8,9 +8,11 @@ import { CreatePaymentDto } from './dto/create-pay-ment.dto';
 import { UpdatePaymentDto } from './dto/update-pay-ment.dto';
 import { CreatePayOSLinkDto } from './dto/create-payos-link.dto';
 import { ConfirmPayOSPaymentDto } from './dto/confirm-payos-payment.dto';
+import { ProcessFreeOrderDto } from './dto/process-free-order.dto';
 import { Order, OrderDocument } from '../order/schemas/order.schema';
 import { OrderService } from '../order/order.service';
 import { OrderStatus } from '../order/schemas/order.schema';
+import { InventoryService } from '../inventory/inventory.service';
 import { MenuItemIngredient, MenuItemIngredientDocument } from '../inventory/schemas/menu-item-ingredient.schema';
 import { Ingredient, IngredientDocument } from '../inventory/schemas/ingredient.schema';
 import { MenuItem } from '../menu-item/schemas/menu-item.schema';
@@ -25,6 +27,8 @@ export class PayMentService {
     private configService: ConfigService,
     @Inject(forwardRef(() => OrderService))
     private orderService: OrderService,
+    @Inject(forwardRef(() => InventoryService))
+    private inventoryService: InventoryService,
     @InjectModel(MenuItemIngredient.name) private menuItemIngredientModel: Model<MenuItemIngredientDocument>,
     @InjectModel(Ingredient.name) private ingredientModel: Model<IngredientDocument>,
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
@@ -129,6 +133,14 @@ async getTotalRevenue(): Promise<number> {
 
   async createPayOSPaymentLink(createPayOSLinkDto: CreatePayOSLinkDto) {
     const { orderId, amount, description, returnUrl, cancelUrl } = createPayOSLinkDto;
+
+    // Reject payment link creation for zero-amount orders
+    // Free orders should use /payment/payos/process-free-order instead
+    if (amount === 0) {
+      throw new BadRequestException(
+        'Cannot create payment link for zero-amount orders. Use /payment/payos/process-free-order for free orders.'
+      );
+    }
 
     // Validate PayOS is initialized
     if (!this.payos) {
@@ -315,44 +327,63 @@ async getTotalRevenue(): Promise<number> {
         order.isPaid = true;
         await order.save();
 
-        // CRITICAL: Check stock availability BEFORE marking as served
-        // If stock is insufficient, payment should NOT be confirmed
+        // CRITICAL: Check stock availability BEFORE marking as served.
+        // If stock is insufficient, payment should NOT be confirmed.
+        // However, if order already has reserved stock (future order), skip
+        // stock check here since reservation was done at creation time.
+        const isStockReserved = (order as any).isStockReserved === true;
+        const reservationDate = (order as any).reservationDate as Date | undefined;
+        const isFutureOrder = reservationDate && new Date(reservationDate) > new Date(new Date().setHours(0, 0, 0, 0));
+
         try {
           const orderItems = order.items.map((item: any) => ({
             item: item.item._id?.toString() || item.item.toString(),
             quantity: item.quantity,
           }));
 
-          // Check availability first (without reserving)
-          for (const orderItem of orderItems) {
-            const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
-            if (!menuItem) {
-              throw new BadRequestException(`Menu item not found: ${orderItem.item}`);
+          if (isStockReserved && isFutureOrder) {
+            // Future order: ingredient stock was already reserved at creation.
+            // confirmIngredientReservation will deduct real stock now.
+            for (const orderItem of orderItems) {
+              await this.inventoryService.confirmIngredientReservation(
+                orderItem.item,
+                orderItem.quantity,
+                reservationDate,
+                order._id.toString(),
+              );
             }
+          } else if (!isStockReserved) {
+            // Immediate order or order without reservation:
+            // Check and deduct ingredient stock now (legacy path).
+            for (const orderItem of orderItems) {
+              const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
+              if (!menuItem) {
+                throw new BadRequestException(`Menu item not found: ${orderItem.item}`);
+              }
 
-            const menuItemIngredients = await this.menuItemIngredientModel
-              .find({ menuItem: orderItem.item })
-              .populate('ingredient')
-              .exec();
+              const menuItemIngredients = await this.menuItemIngredientModel
+                .find({ menuItem: orderItem.item })
+                .populate('ingredient')
+                .exec();
 
-            for (const menuItemIngredient of menuItemIngredients) {
-              const ingredient = (menuItemIngredient as any).ingredient;
-              const requiredQuantity = (menuItemIngredient as any).quantity * orderItem.quantity;
+              for (const menuItemIngredient of menuItemIngredients) {
+                const ingredient = (menuItemIngredient as any).ingredient;
+                const requiredQuantity = (menuItemIngredient as any).quantity * orderItem.quantity;
 
-              if (ingredient.currentStock < requiredQuantity) {
-                throw new BadRequestException(
-                  `Insufficient stock for ingredient ${ingredient.name}. Required: ${requiredQuantity}, Available: ${ingredient.currentStock}`
-                );
+                if (ingredient.currentStock < requiredQuantity) {
+                  throw new BadRequestException(
+                    `Insufficient stock for ingredient '${ingredient.name}'. Required: ${requiredQuantity}, Available: ${ingredient.currentStock}`
+                  );
+                }
               }
             }
           }
+          // else: immediate order with reservation -- stock already deducted at creation
 
-          // Stock is available, proceed with status update
-          await this.orderService.updateStatus(order._id.toString(), OrderStatus.SERVED);
-        } catch (stockError) {
-          // Payment was successful but we cannot serve the order
-          // DO NOT throw - payment record is already processed
-          // Log for manual intervention and refund processing
+          // Now update status (SERVING): deduct menu item stock
+          // Skip ingredient confirm since we already handled it above
+          await this.orderService.updateStatus(order._id.toString(), OrderStatus.SERVED, { skipIngredientConfirm: true });
+        } catch (stockError: any) {
           throw new BadRequestException(
             `Payment successful but order cannot be served due to stock issues: ${stockError.message}. Please contact support for refund.`
           );
@@ -393,5 +424,124 @@ async getTotalRevenue(): Promise<number> {
         `PayOS verification error: ${error.message || 'Unknown error'}`
       );
     }
+  }
+
+  async processFreeOrder(processFreeOrderDto: ProcessFreeOrderDto) {
+    const { orderId, autoServe = true } = processFreeOrderDto;
+
+    if (!Types.ObjectId.isValid(orderId)) {
+      throw new BadRequestException('Invalid order ID format');
+    }
+
+    const order = await this.orderModel
+      .findById(orderId)
+      .populate('items.item', 'name price')
+      .exec();
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.isPaid) {
+      return {
+        success: true,
+        message: 'Order is already paid',
+        orderId: order._id.toString(),
+        status: order.status,
+        isFree: order.isFree,
+      };
+    }
+
+    if (order.totalPrice > 0) {
+      throw new BadRequestException(
+        'This endpoint is only for free orders (totalPrice = 0). For paid orders, please use PayOS payment.'
+      );
+    }
+
+    if (order.status !== OrderStatus.PENDING &&
+        order.status !== OrderStatus.PENDING_APPROVAL &&
+        order.status !== OrderStatus.CONFIRMED) {
+      throw new BadRequestException(
+        `Cannot process free order with status '${order.status}'. Order must be in PENDING, PENDING_APPROVAL, or CONFIRMED status.`
+      );
+    }
+
+    const orderItems = order.items.map((item: any) => ({
+      item: item.item._id?.toString() || item.item.toString(),
+      quantity: item.quantity,
+    }));
+
+    // Check stock availability before marking as paid
+    for (const orderItem of orderItems) {
+      const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
+      if (!menuItem) {
+        throw new BadRequestException(`Menu item not found: ${orderItem.item}`);
+      }
+
+      if (menuItem.stock !== null && menuItem.stock !== undefined) {
+        if (menuItem.stock < orderItem.quantity) {
+          throw new BadRequestException(
+            `Menu item '${menuItem.name}' chỉ còn ${menuItem.stock} phần, không đủ cho số lượng yêu cầu ${orderItem.quantity}`
+          );
+        }
+      }
+
+      const menuItemIngredients = await this.menuItemIngredientModel
+        .find({ menuItem: orderItem.item })
+        .populate('ingredient')
+        .exec();
+
+      for (const menuItemIngredient of menuItemIngredients) {
+        const ingredient = (menuItemIngredient as any).ingredient;
+        const requiredQuantity = (menuItemIngredient as any).quantity * orderItem.quantity;
+
+        if (ingredient.currentStock < requiredQuantity) {
+          throw new BadRequestException(
+            `Insufficient stock for ingredient '${ingredient.name}'. Required: ${requiredQuantity}, Available: ${ingredient.currentStock}`
+          );
+        }
+      }
+    }
+
+    // Mark order as paid and free
+    order.isPaid = true;
+    order.isFree = true;
+    await order.save();
+
+    // If autoServe is true, advance to SERVED status (deducts stock)
+    if (autoServe) {
+      try {
+        await this.orderService.updateStatus(order._id.toString(), OrderStatus.SERVED);
+      } catch (stockError: any) {
+        throw new BadRequestException(
+          `Order marked as paid but cannot serve due to stock issues: ${stockError.message}`
+        );
+      }
+    } else {
+      // Advance to CONFIRMED if still in PENDING
+      if (order.status === OrderStatus.PENDING || order.status === OrderStatus.PENDING_APPROVAL) {
+        try {
+          await this.orderService.updateStatus(order._id.toString(), OrderStatus.CONFIRMED);
+        } catch (e) {
+          // If transition fails, order stays as is but is still paid
+        }
+      }
+    }
+
+    // Get final order state
+    const updatedOrder = await this.orderModel
+      .findById(orderId)
+      .populate('items.item', 'name price category images')
+      .exec();
+
+    return {
+      success: true,
+      message: 'Free order processed successfully',
+      orderId: order._id.toString(),
+      status: updatedOrder?.status || OrderStatus.CONFIRMED,
+      isFree: true,
+      isPaid: true,
+      totalPrice: order.totalPrice,
+    };
   }
 }

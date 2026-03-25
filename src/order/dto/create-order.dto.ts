@@ -9,6 +9,7 @@ import {
   ValidateNested,
   IsEnum,
   ArrayMinSize,
+  IsDateString,
 } from 'class-validator';
 import { OrderType } from '../schemas/order.schema';
 
@@ -79,4 +80,8 @@ export class CreateOnlineOrderDto {
   @IsMongoId()
   @IsOptional()
   user?: string; // Optional: if the user is logged in
+
+  @IsDateString()
+  @IsOptional()
+  reservationDate?: string; // The target consumption date (D-day)
 }

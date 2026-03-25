@@ -23,6 +23,15 @@ export enum BookingType {
   FULL_BOOKING = 'FULL_BOOKING', // Đặt bàn + món
 }
 
+export enum RefundStatus {
+  NOT_APPLICABLE = 'not_applicable',
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  NOT_REQUESTED = 'not_requested',
+}
+
 @Schema({ timestamps: true })
 export class Reservation extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: false })
@@ -142,6 +151,53 @@ export class Reservation extends Document {
   @Prop({ type: Date })
   approvalExpiresAt?: Date; // Hết hạn phê duyệt (mặc định 48h)
 
+  // ========== Refund Fields ==========
+  @Prop({ type: String, enum: RefundStatus, default: RefundStatus.NOT_APPLICABLE })
+  refundStatus: RefundStatus;
+
+  @Prop({ type: Number, default: 0 })
+  refundAmount: number;
+
+  @Prop({ type: Date })
+  refundRequestedAt?: Date;
+
+  @Prop({ type: Date })
+  refundProcessedAt?: Date;
+
+  @Prop()
+  refundReason?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  refundProcessedBy?: Types.ObjectId;
+
+  @Prop()
+  refundNotes?: string;
+
+  @Prop()
+  refundTransactionId?: string;
+
+  // ========== Audit Trail ==========
+  @Prop({ type: [
+    {
+      status: { type: String, required: true },
+      changedBy: { type: String },
+      changedByUserId: { type: Types.ObjectId, ref: 'User' },
+      changedByName: { type: String },
+      reason: { type: String },
+      note: { type: String },
+      timestamp: { type: Date, default: Date.now },
+    }
+  ], default: [] })
+  statusHistory: Array<{
+    status: string;
+    changedBy?: string;
+    changedByUserId?: Types.ObjectId;
+    changedByName?: string;
+    reason?: string;
+    note?: string;
+    timestamp: Date;
+  }>;
+
   @Prop({ type: Object })
   createdBy?: {
     _id: Types.ObjectId;
@@ -195,6 +251,25 @@ export interface IReservation {
     kitchenNotes?: string;
   };
   approvalExpiresAt?: Date;
+  // Refund
+  refundStatus?: RefundStatus;
+  refundAmount?: number;
+  refundRequestedAt?: Date;
+  refundProcessedAt?: Date;
+  refundReason?: string;
+  refundProcessedBy?: Types.ObjectId;
+  refundNotes?: string;
+  refundTransactionId?: string;
+  // Audit Trail
+  statusHistory?: Array<{
+    status: string;
+    changedBy?: string;
+    changedByUserId?: Types.ObjectId;
+    changedByName?: string;
+    reason?: string;
+    note?: string;
+    timestamp: Date;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }

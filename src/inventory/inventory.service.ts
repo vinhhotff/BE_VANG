@@ -9,6 +9,7 @@ import { Ingredient, IngredientDocument } from './schemas/ingredient.schema';
 import { StockMovement, StockMovementDocument, MovementType, MovementReason } from './schemas/stock-movement.schema';
 import { MenuItemIngredient, MenuItemIngredientDocument } from './schemas/menu-item-ingredient.schema';
 import { DailyInventoryReservation, DailyInventoryReservationDocument } from './schemas/daily-inventory-reservation.schema';
+import { IngredientDailyStock, IngredientDailyStockDocument } from './schemas/ingredient-daily-stock.schema';
 import { CreateIngredientDto, UpdateIngredientDto } from './dto/create-ingredient.dto';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { CreateMenuItemIngredientDto, UpdateMenuItemIngredientDto } from './dto/create-menu-item-ingredient.dto';
@@ -32,6 +33,7 @@ export class InventoryService {
     @InjectModel(StockMovement.name) private stockMovementModel: Model<StockMovementDocument>,
     @InjectModel(MenuItemIngredient.name) private menuItemIngredientModel: Model<MenuItemIngredientDocument>,
     @InjectModel(DailyInventoryReservation.name) private dailyReservationModel: Model<DailyInventoryReservationDocument>,
+    @InjectModel(IngredientDailyStock.name) private ingredientDailyStockModel: Model<IngredientDailyStockDocument>,
     @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
   ) {}
 
@@ -206,9 +208,11 @@ export class InventoryService {
   }
 
   // ========== Order Integration ==========
-  async processOrderStock(orderItems: Array<{ item: string; quantity: number }>): Promise<void> {
+  async processOrderStock(
+    orderItems: Array<{ item: string; quantity: number }>,
+    orderId?: string,
+  ): Promise<void> {
     for (const orderItem of orderItems) {
-      // Get ingredients for this menu item
       const menuItemIngredients = await this.menuItemIngredientModel
         .find({ menuItem: orderItem.item })
         .populate('ingredient')
@@ -218,32 +222,32 @@ export class InventoryService {
         const ingredient = menuItemIngredient.ingredient as any;
         const requiredQuantity = menuItemIngredient.quantity * orderItem.quantity;
 
-        // Check if enough stock
         if (ingredient.currentStock < requiredQuantity) {
           throw new BadRequestException(
             `Insufficient stock for ingredient ${ingredient.name}. Required: ${requiredQuantity}, Available: ${ingredient.currentStock}`
           );
         }
 
-        // Create stock movement (OUT)
         await this.createStockMovement(
           {
             ingredient: ingredient._id.toString(),
             type: MovementType.OUT,
             reason: MovementReason.ORDER,
             quantity: requiredQuantity,
-            order: orderItem.item, // Store menu item ID as reference
+            order: orderId,
             notes: `Order served: ${orderItem.quantity}x menu item`,
           },
-          { _id: new Types.ObjectId(), email: 'system@restaurant.com' } as IUser, // System user
+          { _id: new Types.ObjectId(), email: 'system@restaurant.com' } as IUser,
         );
       }
     }
   }
 
-  async restoreOrderStock(orderItems: Array<{ item: string; quantity: number }>): Promise<void> {
+  async restoreOrderStock(
+    orderItems: Array<{ item: string; quantity: number }>,
+    orderId?: string,
+  ): Promise<void> {
     for (const orderItem of orderItems) {
-      // Get ingredients for this menu item
       const menuItemIngredients = await this.menuItemIngredientModel
         .find({ menuItem: orderItem.item })
         .populate('ingredient')
@@ -253,17 +257,16 @@ export class InventoryService {
         const ingredient = menuItemIngredient.ingredient as any;
         const restoredQuantity = menuItemIngredient.quantity * orderItem.quantity;
 
-        // Restore stock by creating IN movement
         await this.createStockMovement(
           {
             ingredient: ingredient._id.toString(),
             type: MovementType.IN,
-            reason: MovementReason.RETURN, // Assuming RETURN is a valid reason
+            reason: MovementReason.RETURN,
             quantity: restoredQuantity,
-            order: orderItem.item,
+            order: orderId,
             notes: `Order cancelled: Restored ${orderItem.quantity}x menu item`,
           },
-          { _id: new Types.ObjectId(), email: 'system@restaurant.com' } as IUser, // System user
+          { _id: new Types.ObjectId(), email: 'system@restaurant.com' } as IUser,
         );
       }
     }
@@ -1105,6 +1108,287 @@ export class InventoryService {
         pending: r.pendingCount,
       })),
     };
+  }
+
+  // ========== Ingredient-Level Daily Reservation (for consumption date tracking) ==========
+
+  /**
+   * Get available ingredient stock accounting for pending + confirmed reservations.
+   * Available = Ingredient.currentStock - totalPending - totalConfirmed
+   * Only considers reservations on or after the target date.
+   */
+  async getAvailableIngredientStock(
+    ingredientId: string,
+    targetDate: Date,
+  ): Promise<number> {
+    const dateOnly = this.getDateOnly(targetDate);
+
+    const reservations = await this.ingredientDailyStockModel.find({
+      ingredient: ingredientId,
+      date: { $gte: dateOnly },
+      isDeleted: { $ne: true },
+    }).exec();
+
+    const reserved = reservations.reduce(
+      (sum, r) => sum + r.pendingQuantity + r.confirmedQuantity,
+      0,
+    );
+
+    const ingredient = await this.ingredientModel.findById(ingredientId).exec();
+    const currentStock = ingredient?.currentStock || 0;
+
+    return Math.max(0, currentStock - reserved);
+  }
+
+  /**
+   * Reserve ingredient stock for a specific date.
+   * This creates a "pending" reservation that blocks the stock without deducting it.
+   * Returns early (success=true) if no MenuItemIngredient links exist (no stock to reserve).
+   */
+  async reserveIngredientStock(
+    menuItemId: string,
+    menuItemQuantity: number,
+    targetDate: Date,
+    orderId?: string,
+  ): Promise<{
+    success: boolean;
+    reservedItems: Array<{
+      ingredientId: string;
+      ingredientName: string;
+      requiredQuantity: number;
+      availableBefore: number;
+    }>;
+    failedItems: Array<{
+      ingredientId: string;
+      ingredientName: string;
+      requiredQuantity: number;
+      availableStock: number;
+    }>;
+  }> {
+    const menuItemIngredients = await this.menuItemIngredientModel
+      .find({ menuItem: menuItemId })
+      .populate('ingredient')
+      .exec();
+
+    if (menuItemIngredients.length === 0) {
+      return { success: true, reservedItems: [], failedItems: [] };
+    }
+
+    const reservedItems: Array<{
+      ingredientId: string;
+      ingredientName: string;
+      requiredQuantity: number;
+      availableBefore: number;
+    }> = [];
+    const failedItems: Array<{
+      ingredientId: string;
+      ingredientName: string;
+      requiredQuantity: number;
+      availableStock: number;
+    }> = [];
+
+    for (const link of menuItemIngredients) {
+      const ingredient = link.ingredient as any;
+      const ingredientId = ingredient._id?.toString() || ingredient.toString();
+      const requiredQty = link.quantity * menuItemQuantity;
+
+      const available = await this.getAvailableIngredientStock(
+        ingredientId,
+        targetDate,
+      );
+
+      if (available < requiredQty) {
+        failedItems.push({
+          ingredientId,
+          ingredientName: ingredient.name || '',
+          requiredQuantity: requiredQty,
+          availableStock: available,
+        });
+        continue;
+      }
+
+      const dateOnly = this.getDateOnly(targetDate);
+
+      await this.ingredientDailyStockModel.findOneAndUpdate(
+        {
+          ingredient: new Types.ObjectId(ingredientId),
+          menuItem: new Types.ObjectId(menuItemId),
+          date: dateOnly,
+        },
+        {
+          $inc: { pendingQuantity: requiredQty },
+          $setOnInsert: {
+            ingredient: new Types.ObjectId(ingredientId),
+            menuItem: new Types.ObjectId(menuItemId),
+            date: dateOnly,
+            confirmedQuantity: 0,
+            orderId: orderId ? new Types.ObjectId(orderId) : undefined,
+            reason: 'pending_reservation',
+          },
+        },
+        { upsert: true, new: true },
+      ).exec();
+
+      reservedItems.push({
+        ingredientId,
+        ingredientName: ingredient.name || '',
+        requiredQuantity: requiredQty,
+        availableBefore: available,
+      });
+    }
+
+    return {
+      success: failedItems.length === 0,
+      reservedItems,
+      failedItems,
+    };
+  }
+
+  /**
+   * Release a pending ingredient reservation (e.g., order cancelled before payment).
+   */
+  async releaseIngredientReservation(
+    menuItemId: string,
+    menuItemQuantity: number,
+    targetDate: Date,
+  ): Promise<void> {
+    const menuItemIngredients = await this.menuItemIngredientModel
+      .find({ menuItem: menuItemId })
+      .exec();
+
+    for (const link of menuItemIngredients) {
+      const releaseQty = link.quantity * menuItemQuantity;
+      const dateOnly = this.getDateOnly(targetDate);
+
+      await this.ingredientDailyStockModel.findOneAndUpdate(
+        {
+          ingredient: link.ingredient,
+          menuItem: link.menuItem,
+          date: dateOnly,
+          pendingQuantity: { $gte: releaseQty },
+        },
+        {
+          $inc: { pendingQuantity: -releaseQty },
+        },
+      ).exec();
+    }
+  }
+
+  /**
+   * Confirm ingredient reservation (called when order is actually served).
+   * Moves from pending to confirmed, then deducts the real stock.
+   */
+  async confirmIngredientReservation(
+    menuItemId: string,
+    menuItemQuantity: number,
+    targetDate: Date,
+    orderId?: string,
+  ): Promise<void> {
+    const menuItemIngredients = await this.menuItemIngredientModel
+      .find({ menuItem: menuItemId })
+      .populate('ingredient')
+      .exec();
+
+    const systemUser = {
+      _id: new Types.ObjectId(),
+      email: 'system@restaurant.com',
+    } as any;
+
+    for (const link of menuItemIngredients) {
+      const ingredient = link.ingredient as any;
+      const ingredientId = ingredient._id?.toString() || '';
+      const confirmQty = link.quantity * menuItemQuantity;
+      const dateOnly = this.getDateOnly(targetDate);
+
+      const reservation = await this.ingredientDailyStockModel.findOneAndUpdate(
+        {
+          ingredient: new Types.ObjectId(ingredientId),
+          menuItem: new Types.ObjectId(menuItemId),
+          date: dateOnly,
+          pendingQuantity: { $gte: confirmQty },
+        },
+        {
+          $inc: {
+            pendingQuantity: -confirmQty,
+            confirmedQuantity: confirmQty,
+          },
+        },
+        { new: true },
+      ).exec();
+
+      if (!reservation) continue;
+
+      const currentStock = ingredient.currentStock ?? 0;
+      if (currentStock < confirmQty) {
+        throw new BadRequestException(
+          `Insufficient stock for ingredient '${ingredient.name || ingredientId}'. Required: ${confirmQty}, Available: ${currentStock}`,
+        );
+      }
+
+      await this.createStockMovement(
+        {
+          ingredient: ingredientId,
+          type: MovementType.OUT,
+          reason: MovementReason.ORDER,
+          quantity: confirmQty,
+          order: orderId,
+          notes: `Order served: ${menuItemQuantity}x menu item for ${targetDate.toISOString().split('T')[0]}`,
+        },
+        systemUser,
+      );
+    }
+  }
+
+  /**
+   * Cancel a confirmed ingredient reservation (e.g., served order cancelled — rare).
+   * Restores real stock.
+   */
+  async cancelConfirmedIngredientReservation(
+    menuItemId: string,
+    menuItemQuantity: number,
+    targetDate: Date,
+    orderId?: string,
+  ): Promise<void> {
+    const menuItemIngredients = await this.menuItemIngredientModel
+      .find({ menuItem: menuItemId })
+      .populate('ingredient')
+      .exec();
+
+    const systemUser = {
+      _id: new Types.ObjectId(),
+      email: 'system@restaurant.com',
+    } as any;
+
+    for (const link of menuItemIngredients) {
+      const ingredient = link.ingredient as any;
+      const ingredientId = ingredient._id?.toString() || '';
+      const cancelQty = link.quantity * menuItemQuantity;
+      const dateOnly = this.getDateOnly(targetDate);
+
+      await this.ingredientDailyStockModel.findOneAndUpdate(
+        {
+          ingredient: new Types.ObjectId(ingredientId),
+          menuItem: new Types.ObjectId(menuItemId),
+          date: dateOnly,
+          confirmedQuantity: { $gte: cancelQty },
+        },
+        {
+          $inc: { confirmedQuantity: -cancelQty },
+        },
+      ).exec();
+
+      await this.createStockMovement(
+        {
+          ingredient: ingredientId,
+          type: MovementType.IN,
+          reason: MovementReason.RETURN,
+          quantity: cancelQty,
+          order: orderId,
+          notes: `Cancelled served order: ${menuItemQuantity}x menu item`,
+        },
+        systemUser,
+      );
+    }
   }
 }
 

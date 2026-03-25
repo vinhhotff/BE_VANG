@@ -144,7 +144,32 @@ export class Order extends Document {
   reservationDate: Date;
 
   @Prop({ type: Boolean, default: false })
+  isFree: boolean;
+
+  @Prop({ type: Boolean, default: false })
   inventoryReserved: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  isStockReserved: boolean;
+
+  @Prop({
+    type: [
+      {
+        ingredient: { type: mongoose.Schema.Types.ObjectId, ref: 'Ingredient' },
+        ingredientName: { type: String },
+        menuItem: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem' },
+        quantity: { type: Number },
+        unit: { type: String },
+      },
+    ],
+  })
+  reservedStockItems: Array<{
+    ingredient: Types.ObjectId;
+    ingredientName: string;
+    menuItem: Types.ObjectId;
+    quantity: number;
+    unit: string;
+  }>;
 
   createdAt: Date;
   updatedAt: Date;
@@ -181,7 +206,16 @@ export interface IOrder {
   approvedAt?: Date;
   approvalNote?: string;
   reservationDate?: Date;
+  isFree: boolean;
   inventoryReserved: boolean;
+  isStockReserved: boolean;
+  reservedStockItems: Array<{
+    ingredient: Types.ObjectId;
+    ingredientName: string;
+    menuItem: Types.ObjectId;
+    quantity: number;
+    unit: string;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }

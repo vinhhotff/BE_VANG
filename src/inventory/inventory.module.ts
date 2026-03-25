@@ -6,6 +6,7 @@ import { Ingredient, IngredientSchema } from './schemas/ingredient.schema';
 import { StockMovement, StockMovementSchema } from './schemas/stock-movement.schema';
 import { MenuItemIngredient, MenuItemIngredientSchema } from './schemas/menu-item-ingredient.schema';
 import { DailyInventoryReservation, DailyInventoryReservationSchema } from './schemas/daily-inventory-reservation.schema';
+import { IngredientDailyStock, IngredientDailyStockSchema } from './schemas/ingredient-daily-stock.schema';
 import { MenuItem, MenuItemSchema } from '../menu-item/schemas/menu-item.schema';
 
 @Module({
@@ -15,6 +16,7 @@ import { MenuItem, MenuItemSchema } from '../menu-item/schemas/menu-item.schema'
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: MenuItemIngredient.name, schema: MenuItemIngredientSchema },
       { name: DailyInventoryReservation.name, schema: DailyInventoryReservationSchema },
+      { name: IngredientDailyStock.name, schema: IngredientDailyStockSchema },
       { name: MenuItem.name, schema: MenuItemSchema },
     ]),
   ],

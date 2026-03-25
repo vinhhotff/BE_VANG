@@ -168,6 +168,7 @@ export class OrderService {
       orderType,
       deliveryAddress,
       specialInstructions,
+      reservationDate: reservationDateStr,
     } = createOnlineOrderDto;
 
     if (orderType === OrderType.DELIVERY && !deliveryAddress) {
@@ -175,6 +176,23 @@ export class OrderService {
         'Delivery address is required for delivery orders'
       );
     }
+
+    // Determine the consumption (D-day) date
+    let targetDate: Date;
+    if (reservationDateStr) {
+      targetDate = new Date(reservationDateStr);
+      targetDate.setHours(0, 0, 0, 0);
+      if (isNaN(targetDate.getTime())) {
+        throw new BadRequestException('Invalid reservation date format');
+      }
+    } else {
+      targetDate = new Date();
+      targetDate.setHours(0, 0, 0, 0);
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isImmediateOrder = targetDate.getTime() === today.getTime();
 
     // Validate menu items and calculate total price
     let totalPrice = 0;
@@ -184,6 +202,14 @@ export class OrderService {
       unitPrice: number;
       subtotal: number;
     }[] = [];
+
+    const reservedStockItems: Array<{
+      ingredient: Types.ObjectId;
+      ingredientName: string;
+      menuItem: Types.ObjectId;
+      quantity: number;
+      unit: string;
+    }> = [];
 
     for (const orderItem of items) {
       const menuItem = await this.menuItemModel.findById(orderItem.item).exec();
@@ -198,7 +224,7 @@ export class OrderService {
         );
       }
 
-      // Check stock availability
+      // Check top-level menu item stock (menu-level cap)
       if (menuItem.stock !== null && menuItem.stock !== undefined) {
         if (menuItem.stock < orderItem.quantity) {
           throw new BadRequestException(
@@ -206,6 +232,59 @@ export class OrderService {
           );
         }
       }
+
+        // Reserve ingredient stock based on consumption date
+        const menuItemId = orderItem.item;
+        const menuItemObjId = new Types.ObjectId(menuItemId);
+
+        if (isImmediateOrder) {
+          // Immediate order: deduct stock right away
+          const orderItemsForStock = [{ item: menuItemId, quantity: orderItem.quantity }];
+          await this.inventoryService.processOrderStock(orderItemsForStock);
+          await this.menuItemService.deductStock(menuItemId, orderItem.quantity);
+
+          const menuItemIngredients = await this.inventoryService
+            .getIngredientsByMenuItem(menuItemId);
+          for (const link of menuItemIngredients) {
+            const ing = link.ingredient as any;
+            reservedStockItems.push({
+              ingredient: (ing._id || ing) as Types.ObjectId,
+              ingredientName: (ing.name || '') as string,
+              menuItem: menuItemObjId,
+              quantity: (link.quantity || 0) * orderItem.quantity,
+              unit: (link.unit || ing.unit || '') as string,
+            });
+          }
+        } else {
+          // Future order: create pending ingredient reservations
+          const reserveResult = await this.inventoryService.reserveIngredientStock(
+            menuItemId,
+            orderItem.quantity,
+            targetDate,
+          );
+
+          if (!reserveResult.success) {
+            const failed = reserveResult.failedItems
+              .map((f) => `${f.ingredientName}: cần ${f.requiredQuantity}, chỉ còn ${f.availableStock}`)
+              .join('; ');
+            throw new BadRequestException(
+              `Không đủ nguyên liệu cho ngày ${targetDate.toISOString().split('T')[0]}:\n${failed}`
+            );
+          }
+
+          const menuItemIngredients = await this.inventoryService
+            .getIngredientsByMenuItem(menuItemId);
+          for (const link of menuItemIngredients) {
+            const ing = link.ingredient as any;
+            reservedStockItems.push({
+              ingredient: (ing._id || ing) as Types.ObjectId,
+              ingredientName: (ing.name || '') as string,
+              menuItem: menuItemObjId,
+              quantity: (link.quantity || 0) * orderItem.quantity,
+              unit: (link.unit || ing.unit || '') as string,
+            });
+          }
+        }
 
       const unitPrice = menuItem.price;
       const subtotal = unitPrice * orderItem.quantity;
@@ -229,6 +308,10 @@ export class OrderService {
       deliveryAddress:
         orderType === OrderType.DELIVERY ? deliveryAddress : undefined,
       user: user ? user : undefined,
+      reservationDate: targetDate,
+      isStockReserved: true,
+      inventoryReserved: isImmediateOrder,
+      reservedStockItems,
     };
 
     const order = new this.orderModel(orderData);
@@ -242,9 +325,6 @@ export class OrderService {
         deliveryAddress: deliveryAddress!,
       });
     }
-
-    // Note: Inventory stock will be deducted when order status changes to SERVED
-    // This prevents stock issues if order is cancelled before being served
 
     // Send notification to admins/staff about new order
     try {
@@ -357,7 +437,7 @@ export class OrderService {
       .exec();
   }
 
-  async updateStatus(id: string, status: OrderStatus): Promise<Order> {
+  async updateStatus(id: string, status: OrderStatus, options?: { skipIngredientConfirm?: boolean }): Promise<Order> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid order ID format');
     }
@@ -397,18 +477,43 @@ export class OrderService {
     // Process inventory stock when order is SERVED
     if (status === OrderStatus.SERVED && previousStatus !== OrderStatus.SERVED) {
       try {
-        // 1. Process menu item stock (deduct)
-        for (const item of order.items) {
-          const itemId = item.item._id?.toString() || item.item.toString();
-          await this.menuItemService.deductStock(itemId, item.quantity);
-        }
-
-        // 2. Process ingredient inventory stock (if linked)
         const orderItems = order.items.map((item: any) => ({
           item: item.item._id?.toString() || item.item.toString(),
           quantity: item.quantity,
         }));
-        await this.inventoryService.processOrderStock(orderItems);
+
+        if ((order as any).isStockReserved) {
+          const reservationDate = (order as any).reservationDate as Date | undefined;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const resDate = reservationDate ? new Date(reservationDate) : null;
+          if (resDate) resDate.setHours(0, 0, 0, 0);
+          const isFutureOrder = resDate && resDate.getTime() > today.getTime();
+
+          if (isFutureOrder && !options?.skipIngredientConfirm) {
+            // Future order: confirm pending reservation → deduct real stock
+            for (const orderItem of orderItems) {
+              await this.inventoryService.confirmIngredientReservation(
+                orderItem.item,
+                orderItem.quantity,
+                reservationDate!,
+                order._id.toString(),
+              );
+            }
+          }
+          // Immediate order (today): ingredients already deducted at creation → nothing to do
+        } else if (!options?.skipIngredientConfirm) {
+          // Legacy path: no reservation tracking, deduct now
+          await this.inventoryService.processOrderStock(orderItems, order._id.toString());
+        }
+
+        // Deduct menu item stock (only if not already deducted at creation)
+        if (!(order as any).inventoryReserved) {
+          for (const item of order.items) {
+            const itemId = item.item._id?.toString() || item.item.toString();
+            await this.menuItemService.deductStock(itemId, item.quantity);
+          }
+        }
       } catch (error: any) {
         // Revert status if stock processing fails
         await this.orderModel.findByIdAndUpdate(id, { status: previousStatus }).exec();
@@ -418,7 +523,7 @@ export class OrderService {
       }
     }
 
-    // Restore menu item stock if order is CANCELLED after being SERVED
+    // Restore inventory if order is CANCELLED after being SERVED
     if (status === OrderStatus.CANCELLED && previousStatus === OrderStatus.SERVED) {
       try {
         // 1. Restore menu item stock
@@ -427,14 +532,45 @@ export class OrderService {
           await this.menuItemService.restoreStock(itemId, item.quantity);
         }
 
-        // 2. Restore ingredient inventory stock
+        // 2. Cancel confirmed ingredient reservation and restore real stock
+        const reservationDate = (order as any).reservationDate;
         const orderItems = order.items.map((item: any) => ({
           item: item.item._id?.toString() || item.item.toString(),
           quantity: item.quantity,
         }));
-        await this.inventoryService.restoreOrderStock(orderItems);
+        for (const orderItem of orderItems) {
+          await this.inventoryService.cancelConfirmedIngredientReservation(
+            orderItem.item,
+            orderItem.quantity,
+            reservationDate,
+            order._id.toString(),
+          );
+        }
       } catch (error: any) {
         // Log error but don't fail the cancellation
+      }
+    }
+
+    // Release pending reservations if order is CANCELLED before SERVED (future orders)
+    if (status === OrderStatus.CANCELLED &&
+        (previousStatus === OrderStatus.PENDING || previousStatus === OrderStatus.PENDING_APPROVAL || previousStatus === OrderStatus.CONFIRMED)) {
+      if ((order as any).isStockReserved && (order as any).reservationDate) {
+        const reservationDate = (order as any).reservationDate;
+        const orderItems = order.items.map((item: any) => ({
+          item: item.item._id?.toString() || item.item.toString(),
+          quantity: item.quantity,
+        }));
+        for (const orderItem of orderItems) {
+          try {
+            await this.inventoryService.releaseIngredientReservation(
+              orderItem.item,
+              orderItem.quantity,
+              reservationDate,
+            );
+          } catch (e) {
+            // Silent fail
+          }
+        }
       }
     }
 
@@ -617,17 +753,50 @@ export class OrderService {
     }
 
     const order = await this.orderModel
-      .findByIdAndUpdate(id, { isPaid: markOrderPaidDto.isPaid }, { new: true })
-      .populate('items.item', 'name price category images')
-      .populate('guest', 'tableCode')
-      .populate('user', 'name email')
+      .findById(id)
+      .populate('items.item', 'name price')
       .exec();
 
     if (!order) {
       throw new NotFoundException('Order not found');
     }
 
-    return order;
+    if (!markOrderPaidDto.isPaid) {
+      // Unmark as paid
+      const updated = await this.orderModel
+        .findByIdAndUpdate(id, { isPaid: false }, { new: true })
+        .populate('items.item', 'name price category images')
+        .populate('guest', 'tableCode')
+        .populate('user', 'name email')
+        .exec();
+      return updated!;
+    }
+
+    // Mark as paid
+    order.isPaid = true;
+
+    // If this is a free order (totalPrice = 0), mark as free and auto-serve
+    // to deduct stock immediately
+    if (order.totalPrice === 0) {
+      order.isFree = true;
+      await order.save();
+
+      // Auto-serve free orders to deduct stock
+      if (order.status === OrderStatus.PENDING ||
+          order.status === OrderStatus.PENDING_APPROVAL ||
+          order.status === OrderStatus.CONFIRMED) {
+        return await this.updateStatus(id, OrderStatus.SERVED);
+      }
+    }
+
+    const updated = await order.save();
+
+    return this.orderModel
+      .findById(id)
+      .populate('items.item', 'name price category images')
+      .populate('guest', 'tableCode')
+      .populate('user', 'name email')
+      .exec() as Promise<Order>;
   }
 
   // ========== Check Stock Availability ==========

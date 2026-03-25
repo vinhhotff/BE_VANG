@@ -5,15 +5,20 @@ import { softDeletePlugin } from 'soft-delete-plugin-mongoose';
 export type NotificationDocument = HydratedDocument<Notification>;
 
 export enum NotificationType {
-  ORDER_NEW = 'order_new', // New order for admin/staff
-  ORDER_STATUS_CHANGED = 'order_status_changed', // Order status changed for customer
-  ORDER_CANCELLED = 'order_cancelled', // Order cancelled
-  RESERVATION_NEW = 'reservation_new', // New reservation
-  RESERVATION_CONFIRMED = 'reservation_confirmed', // Reservation confirmed
-  RESERVATION_CANCELLED = 'reservation_cancelled', // Reservation cancelled
-  REVIEW_NEW = 'review_new', // New review for admin
-  REVIEW_APPROVED = 'review_approved', // Review approved for customer
-  SYSTEM = 'system', // System notification
+  ORDER_NEW = 'order_new',
+  ORDER_STATUS_CHANGED = 'order_status_changed',
+  ORDER_CANCELLED = 'order_cancelled',
+  RESERVATION_NEW = 'reservation_new',
+  RESERVATION_CONFIRMED = 'reservation_confirmed',
+  RESERVATION_CANCELLED = 'reservation_cancelled',
+  RESERVATION_DEPOSIT_PAID = 'reservation_deposit_paid',
+  RESERVATION_REFUND_REQUESTED = 'reservation_refund_requested',
+  RESERVATION_REFUND_COMPLETED = 'reservation_refund_completed',
+  RESERVATION_ADMIN_CANCELLED = 'reservation_admin_cancelled',
+  RESERVATION_REFUND_FAILED = 'reservation_refund_failed',
+  REVIEW_NEW = 'review_new',
+  REVIEW_APPROVED = 'review_approved',
+  SYSTEM = 'system',
 }
 
 export enum NotificationPriority {

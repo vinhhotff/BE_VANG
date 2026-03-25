@@ -15,6 +15,8 @@ interface BulkOrderNotificationData {
   totalItems?: number;
   depositAmount?: number;
   reason?: string;
+  refundAmount?: number;
+  refundStatus?: string;
 }
 
 interface NotificationPayload {
@@ -22,6 +24,7 @@ interface NotificationPayload {
   title: string;
   message: string;
   data?: BulkOrderNotificationData;
+  priority?: string;
 }
 
 @Injectable()

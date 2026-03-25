@@ -3,6 +3,7 @@ import { Public } from '../auth/decoration/setMetadata';
 import { PayMentService } from './pay-ment.service';
 import { CreatePayOSLinkDto } from './dto/create-payos-link.dto';
 import { ConfirmPayOSPaymentDto } from './dto/confirm-payos-payment.dto';
+import { ProcessFreeOrderDto } from './dto/process-free-order.dto';
 
 @Controller('payment')
 export class PayOSController {
@@ -18,6 +19,12 @@ export class PayOSController {
   @Post('payos/confirm-payment')
   async confirmPayOSPayment(@Body() confirmDto: ConfirmPayOSPaymentDto) {
     return this.paymentService.confirmPayOSPayment(confirmDto);
+  }
+
+  @Public()
+  @Post('payos/process-free-order')
+  async processFreeOrder(@Body() processFreeOrderDto: ProcessFreeOrderDto) {
+    return this.paymentService.processFreeOrder(processFreeOrderDto);
   }
 }
 

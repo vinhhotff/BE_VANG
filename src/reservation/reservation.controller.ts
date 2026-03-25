@@ -17,7 +17,7 @@ import {
   ConfirmDepositDto,
   CheckTableAvailabilityDto,
 } from './dto/create-reservation.dto';
-import { ApproveReservationDto, RejectReservationDto, UpdateApprovalSettingsDto } from './dto/approval.dto';
+import { ApproveReservationDto, RejectReservationDto, CancelConfirmedDto, UpdateApprovalSettingsDto } from './dto/approval.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   User,
@@ -280,5 +280,21 @@ export class ReservationController {
   @Patch('approval-settings')
   updateApprovalSettings(@Body() dto: UpdateApprovalSettingsDto) {
     return this.reservationService.updateApprovalSettings(dto);
+  }
+
+  /**
+   * Admin cancel a confirmed reservation (after deposit was paid).
+   * Handles refund flow, inventory release, and customer notification.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Permission('reservation:cancelConfirmed')
+  @CustomMessage('Hủy đặt bàn đã xác nhận (sau đặt cọc)')
+  @Post(':id/cancel-confirmed')
+  cancelConfirmedReservation(
+    @Param('id') id: string,
+    @Body() dto: CancelConfirmedDto,
+    @User() user: IUser,
+  ) {
+    return this.reservationService.cancelConfirmedReservation(id, dto, user);
   }
 }

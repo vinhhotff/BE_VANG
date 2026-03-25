@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Reservation, ReservationStatus, BookingType, ApprovalStatus } from './schemas/reservation.schema';
+import { Reservation, ReservationStatus, BookingType, ApprovalStatus, RefundStatus } from './schemas/reservation.schema';
 import { CreateReservationDto, UpdateReservationStatusDto, CreateFullBookingDto, ConfirmDepositDto, CheckTableAvailabilityDto, ReservationItemDto } from './dto/create-reservation.dto';
-import { ApproveReservationDto, RejectReservationDto, UpdateApprovalSettingsDto, ApprovalSettingsResponseDto } from './dto/approval.dto';
+import { ApproveReservationDto, RejectReservationDto, CancelConfirmedDto, UpdateApprovalSettingsDto, ApprovalSettingsResponseDto } from './dto/approval.dto';
 import { IUser } from '../user/user.interface';
 import { Table } from '../table/schemas/table.schema';
 import { MenuItem } from '../menu-item/schemas/menu-item.schema';
@@ -518,15 +518,8 @@ export class ReservationService {
 
     const savedReservation = await reservation.save();
 
-    // Update table status to 'reserved' if table is selected
-    if (dto.tableId) {
-      try {
-        await this.tableService.updateTableStatus(dto.tableId, 'reserved');
-      } catch (error) {
-        console.error('Failed to update table status:', error);
-        // Continue anyway - table is still reserved in reservation
-      }
-    }
+    // NOTE: Table is NOT locked here. It will be locked only when deposit is confirmed.
+    // This prevents the "full table but no payment" bug.
 
     // Reserve inventory if there are items (and not requiring approval)
     if (hasItems && !requiresApproval && dto.items) {
@@ -547,11 +540,8 @@ export class ReservationService {
           );
         }
       } catch (error) {
-        // If inventory reservation fails, delete the reservation and rollback table status
+        // If inventory reservation fails, delete the reservation
         await this.reservationModel.findByIdAndDelete(savedReservation._id);
-        if (dto.tableId) {
-          await this.tableService.updateTableStatus(dto.tableId, 'available').catch(() => {});
-        }
         throw new BadRequestException(`Không thể đặt món: ${error.message}`);
       }
     }
@@ -596,40 +586,98 @@ export class ReservationService {
   }
 
   /**
-   * Confirm deposit payment
+   * Confirm deposit payment.
+   * Locks table atomically and confirms inventory.
+   * Idempotent: calling again on already-confirmed reservation returns success.
    */
   async confirmDeposit(id: string, confirmDepositDto: ConfirmDepositDto): Promise<Reservation> {
-    const reservation = await this.findById(id);
+    // Idempotency check: if already confirmed, just return
+    const existing = await this.reservationModel.findById(id).exec();
+    if (!existing) {
+      throw new NotFoundException('Không tìm thấy đặt bàn');
+    }
 
-    if (reservation.isDepositPaid) {
-      throw new BadRequestException('Đặt cọc đã được xác nhận trước đó');
+    if (existing.isDepositPaid) {
+      // Already confirmed - return as success (idempotent)
+      return existing;
+    }
+
+    // Atomic table lock: only lock table if not already locked by another confirmed reservation
+    if (existing.table) {
+      const tableId = existing.table instanceof Types.ObjectId
+        ? existing.table.toString()
+        : (existing.table as any)._id?.toString() || String(existing.table);
+
+      const { start, end } = this.getTimeWindow(existing.reservationDate);
+
+      // Check if table is already confirmed by another reservation in this window
+      const conflictingReservation = await this.reservationModel.findOne({
+        _id: { $ne: existing._id },
+        table: existing.table,
+        reservationDate: { $gte: start, $lte: end },
+        status: ReservationStatus.CONFIRMED,
+        isDepositPaid: true,
+      }).exec();
+
+      if (conflictingReservation) {
+        throw new ConflictException(
+          `Bàn này đã được xác nhận bởi đặt bàn khác trong khung giờ này. Vui lòng liên hệ nhà hàng.`,
+        );
+      }
+
+      // Lock the table
+      try {
+        await this.tableService.updateTableStatus(tableId, 'reserved');
+      } catch (error) {
+        console.error('Failed to lock table:', error);
+        throw new ConflictException(`Bàn không còn khả dụng. Vui lòng chọn bàn khác.`);
+      }
     }
 
     // Update reservation with deposit info
-    reservation.isDepositPaid = true;
-    reservation.depositPaid = reservation.depositAmount;
-    reservation.depositPaymentMethod = confirmDepositDto.paymentMethod;
-    reservation.depositPaidAt = new Date();
-    reservation.status = ReservationStatus.CONFIRMED;
+    existing.isDepositPaid = true;
+    existing.depositPaid = existing.depositAmount;
+    existing.depositPaymentMethod = confirmDepositDto.paymentMethod;
+    existing.depositPaidAt = new Date();
+    existing.status = ReservationStatus.CONFIRMED;
 
-    // Confirm inventory reservations (move from pending to confirmed)
-    if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
-      const dateStr = reservation.usageDate.toISOString().split('T')[0];
-      for (const item of reservation.items) {
+    // Record audit trail
+    this.addStatusHistory(existing, ReservationStatus.CONFIRMED, 'customer', undefined, 'Đặt cọc thành công');
+
+    // Confirm inventory reservations (pending → confirmed → deduct actual stock)
+    const inventoryErrors: string[] = [];
+    if (existing.items && existing.items.length > 0 && existing.usageDate) {
+      for (const item of existing.items) {
         try {
-          await this.inventoryService.confirmReservation(
+          await this.inventoryService.confirmIngredientReservation(
             item.item.toString(),
-            dateStr,
-            item.quantity
+            item.quantity, // menuItemQuantity: how many of this menu item are ordered
+            existing.usageDate,
+            existing._id.toString(),
           );
         } catch (error) {
-          console.error('Failed to confirm inventory reservation:', error);
-          // Continue with deposit confirmation even if inventory confirmation fails
+          console.error('Failed to confirm inventory:', error);
+          inventoryErrors.push(`${item.item}: ${error.message}`);
         }
       }
     }
 
-    return reservation.save();
+    // Send confirmation notification
+    try {
+      await this.notificationService.sendToUser(existing.customerPhone, {
+        type: 'RESERVATION_DEPOSIT_PAID',
+        title: 'Đặt bàn xác nhận thành công',
+        message: `Bạn đã đặt cọc thành công ${existing.depositPaid.toLocaleString('vi-VN')} VNĐ cho đặt bàn ngày ${this.formatDate(existing.reservationDate)} lúc ${existing.reservationTime}. Cảm ơn bạn!`,
+        data: {
+          reservationId: existing._id.toString(),
+          depositAmount: existing.depositPaid,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to send deposit confirmation notification:', error);
+    }
+
+    return existing.save();
   }
 
   /**
@@ -849,6 +897,9 @@ export class ReservationService {
     };
     reservation.status = ReservationStatus.PENDING; // Now waiting for deposit
 
+    // Record audit trail
+    this.addStatusHistory(reservation, ReservationStatus.PENDING, 'admin', user, undefined, dto.adminNotes || 'Phê duyệt đơn hàng, chờ đặt cọc');
+
     const savedReservation = await reservation.save();
 
     // Send notification to customer
@@ -889,6 +940,27 @@ export class ReservationService {
     reservation.rejectedAt = new Date();
     reservation.rejectedReason = dto.reason;
     reservation.status = ReservationStatus.CANCELLED;
+
+    // Record audit trail
+    this.addStatusHistory(reservation, ReservationStatus.CANCELLED, 'admin', user, dto.reason, 'Từ chối phê duyệt');
+
+    // Release inventory that was reserved during the approval step
+    // (inventory was reserved in approveReservation before approvalStatus was set to APPROVED)
+    if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+      const dateStr = reservation.usageDate.toISOString().split('T')[0];
+      for (const item of reservation.items) {
+        try {
+          await this.inventoryService.releaseInventory(
+            item.item.toString(),
+            dateStr,
+            item.quantity,
+            reservation._id.toString(),
+          );
+        } catch (error) {
+          console.error('Failed to release inventory after rejection:', error);
+        }
+      }
+    }
 
     const savedReservation = await reservation.save();
 
@@ -1171,5 +1243,179 @@ export class ReservationService {
     this.approvalConfig.updateConfig(updateData);
 
     return this.getApprovalSettings();
+  }
+
+  // ========== Refund & Cancel After Deposit ==========
+
+  /**
+   * Admin cancel a CONFIRMED reservation (after deposit was paid).
+   * Handles refund flow, inventory release, and customer notification.
+   */
+  async cancelConfirmedReservation(
+    reservationId: string,
+    dto: CancelConfirmedDto,
+    user: IUser,
+  ): Promise<Reservation> {
+    const reservation = await this.findById(reservationId);
+
+    // Business rule: only confirmed reservations can be cancelled by admin with refund
+    if (reservation.status !== ReservationStatus.CONFIRMED) {
+      throw new BadRequestException(
+        'Chỉ có thể hủy đặt bàn đã xác nhận (đã đặt cọc). Vui lòng sử dụng chức năng từ chối cho đơn đang chờ phê duyệt.',
+      );
+    }
+
+    if (!reservation.isDepositPaid) {
+      throw new BadRequestException('Đặt bàn này chưa được đặt cọc. Không thể yêu cầu hoàn tiền.');
+    }
+
+    const requestRefund = dto.requestRefund !== false; // default: true
+
+    // Record audit trail BEFORE changing anything
+    this.addStatusHistory(reservation, ReservationStatus.CANCELLED, 'admin', user, dto.reason);
+
+    // Update reservation cancellation fields
+    reservation.status = ReservationStatus.CANCELLED;
+
+    // Handle refund
+    if (requestRefund && reservation.depositPaid > 0) {
+      reservation.refundStatus = RefundStatus.PENDING;
+      reservation.refundAmount = reservation.depositPaid;
+      reservation.refundRequestedAt = new Date();
+      reservation.refundReason = dto.reason;
+
+      // TODO: Call PayOS refund API here when PayOS refund integration is ready
+      // For now, mark as completed and note it needs manual processing
+      try {
+        // Simulate PayOS refund call - replace with actual PayOS refund integration
+        // await payosService.refundDeposit(reservation._id.toString(), reservation.depositPaid);
+        reservation.refundStatus = RefundStatus.PROCESSING;
+        reservation.refundNotes = `Yêu cầu hoàn tiền đã được ghi nhận. Cần xử lý hoàn tiền qua PayOS.`;
+        // When PayOS refund is implemented:
+        // reservation.refundStatus = RefundStatus.COMPLETED;
+        // reservation.refundProcessedAt = new Date();
+        // reservation.refundTransactionId = 'PAYOS_REFUND_ID';
+      } catch (error) {
+        reservation.refundStatus = RefundStatus.FAILED;
+        reservation.refundNotes = `Lỗi khi yêu cầu hoàn tiền: ${error.message}`;
+      }
+    } else {
+      // Customer gave up deposit (no refund requested)
+      reservation.refundStatus = RefundStatus.NOT_REQUESTED;
+      reservation.refundReason = dto.reason;
+    }
+
+    reservation.refundProcessedBy = new Types.ObjectId(user._id.toString());
+
+    // Release inventory (confirmed inventory → return to actual stock)
+    if (reservation.items && reservation.items.length > 0 && reservation.usageDate) {
+      const usageDate = new Date(reservation.usageDate);
+      for (const item of reservation.items) {
+        try {
+          await this.inventoryService.cancelConfirmedIngredientReservation(
+            item.item.toString(),
+            item.quantity,
+            usageDate,
+            reservation._id.toString(),
+          );
+        } catch (error) {
+          console.error('Failed to cancel confirmed inventory:', error);
+        }
+      }
+    }
+
+    // Release table back to available
+    if (reservation.table) {
+      try {
+        const tableId = reservation.table instanceof Types.ObjectId
+          ? reservation.table.toString()
+          : (reservation.table as any)._id?.toString() || String(reservation.table);
+        await this.tableService.updateTableStatus(tableId, 'available');
+      } catch (error) {
+        console.error('Failed to release table:', error);
+      }
+    }
+
+    const savedReservation = await reservation.save();
+
+    // Send notification to customer about cancellation
+    const notificationType = requestRefund && reservation.depositPaid > 0
+      ? 'RESERVATION_ADMIN_CANCELLED' : 'RESERVATION_CANCELLED';
+
+    const refundMsg = requestRefund && reservation.depositPaid > 0
+      ? ` Yêu cầu hoàn tiền ${reservation.depositPaid.toLocaleString('vi-VN')} VNĐ đang được xử lý.`
+      : '';
+
+    const noRefundMsg = !requestRefund && reservation.depositPaid > 0
+      ? ` Tiền đặt cọc sẽ không được hoàn lại theo yêu cầu của nhà hàng.`
+      : '';
+
+    try {
+      await this.notificationService.sendToUser(reservation.customerPhone, {
+        type: notificationType,
+        title: 'Đặt bàn bị hủy bởi nhà hàng',
+        message: `Rất tiếc, đặt bàn ngày ${this.formatDate(reservation.reservationDate)} lúc ${reservation.reservationTime} đã bị hủy. Lý do: ${dto.reason}.${refundMsg}${noRefundMsg}`,
+        data: {
+          reservationId: reservation._id.toString(),
+          reason: dto.reason,
+          depositAmount: reservation.depositPaid,
+          refundStatus: reservation.refundStatus,
+        },
+      });
+
+      // Also notify all admins about this cancellation
+      await this.notificationService.sendToAdmins({
+        type: 'RESERVATION_ADMIN_CANCELLED',
+        title: 'Admin hủy đặt bàn đã xác nhận',
+        message: `Admin đã hủy đặt bàn của ${reservation.customerName} (${reservation.customerPhone}) ngày ${this.formatDate(reservation.reservationDate)}.${refundMsg}`,
+        data: {
+          reservationId: reservation._id.toString(),
+          refundAmount: reservation.depositPaid,
+          refundStatus: reservation.refundStatus,
+        },
+        priority: 'medium',
+      });
+    } catch (error) {
+      console.error('Failed to send cancellation notification:', error);
+    }
+
+    return savedReservation;
+  }
+
+  /**
+   * Add entry to status history audit trail
+   */
+  private addStatusHistory(
+    reservation: Reservation,
+    status: ReservationStatus,
+    changedBy: 'admin' | 'customer' | 'system',
+    user?: IUser,
+    reason?: string,
+    note?: string,
+  ): void {
+    const historyEntry = {
+      status,
+      changedBy,
+      changedByUserId: user ? new Types.ObjectId(user._id.toString()) : undefined,
+      changedByName: user?.email || (changedBy === 'system' ? 'Hệ thống' : changedBy),
+      reason,
+      note,
+      timestamp: new Date(),
+    };
+    if (!reservation.statusHistory) {
+      (reservation as any).statusHistory = [];
+    }
+    reservation.statusHistory.push(historyEntry as any);
+  }
+
+  /**
+   * Format date for display
+   */
+  private formatDate(date: Date): string {
+    return new Date(date).toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
   }
 }
