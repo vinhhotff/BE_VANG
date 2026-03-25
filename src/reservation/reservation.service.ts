@@ -308,8 +308,12 @@ export class ReservationService {
       if (reservation.items && reservation.items.length > 0) {
         // 1) MenuItem.stock + soldCount (field trên document món — admin thường xem chỗ này)
         for (const line of reservation.items) {
+          const itemId = typeof line.item === 'object' && line.item !== null && '_id' in line.item
+            ? (line.item as any)._id.toString()
+            : (line.item as any).toString();
+
           await this.menuItemService.deductStock(
-            line.item.toString(),
+            itemId,
             line.quantity,
           );
         }
@@ -318,9 +322,13 @@ export class ReservationService {
         if (reservation.usageDate) {
           const usageDate = new Date(reservation.usageDate);
           for (const line of reservation.items) {
+            const itemId = typeof line.item === 'object' && line.item !== null && '_id' in line.item
+              ? (line.item as any)._id.toString()
+              : (line.item as any).toString();
+
             try {
               await this.inventoryService.confirmIngredientReservation(
-                line.item.toString(),
+                itemId,
                 line.quantity,
                 usageDate,
                 reservation._id.toString(),
@@ -827,7 +835,7 @@ export class ReservationService {
     return this.reservationModel
       .find({ customerPhone: phone })
       .populate('table', 'tableName location')
-      .populate('items.item', 'name price category')
+      .populate('items.item', 'name price category image images description')
       .sort({ reservationDate: -1 })
       .exec();
   }
