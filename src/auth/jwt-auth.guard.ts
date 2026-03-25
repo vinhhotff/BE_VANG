@@ -22,9 +22,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     ]);
 
     // If the route is public and there's no user (or an error),
-    // don't throw an error, just return null.
+    // don't throw an error, allow request to proceed.
     if (isPublic && (err || !user)) {
-      return null;
+      return true;
     }
 
     // For protected routes, if there's an error or no user, throw an exception.
