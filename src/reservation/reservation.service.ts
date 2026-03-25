@@ -247,6 +247,7 @@ export class ReservationService {
       .findById(id)
       .populate('user', 'name email')
       .populate('table', 'tableName location status capacity')
+      .populate('items.item', 'name price category image description')
       .exec();
 
     if (!reservation) {
