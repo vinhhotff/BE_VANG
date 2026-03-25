@@ -1075,11 +1075,11 @@ export class ReservationService {
     const reservation = await this.findById(reservationId);
 
     // Validate status
-    if (reservation.status !== ReservationStatus.PENDING_APPROVAL) {
-      throw new BadRequestException('Đơn hàng này không ở trạng thái chờ phê duyệt');
+    if (![ReservationStatus.PENDING_APPROVAL, ReservationStatus.PENDING].includes(reservation.status as ReservationStatus)) {
+      throw new BadRequestException('Đơn hàng này không ở trạng thái chờ phê duyệt hoặc chờ xác nhận');
     }
 
-    if (reservation.approvalStatus !== ApprovalStatus.PENDING) {
+    if (reservation.status === ReservationStatus.PENDING_APPROVAL && reservation.approvalStatus !== ApprovalStatus.PENDING) {
       throw new BadRequestException('Đơn hàng này đã được xử lý trước đó');
     }
 
