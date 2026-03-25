@@ -231,7 +231,7 @@ export class ReservationService {
       .populate('user', 'name email')
       .populate('table', 'tableName location status capacity')
       .populate('items.item', 'name price category image images description')
-      .sort({ reservationDate: 1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .exec();
