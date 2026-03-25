@@ -209,10 +209,12 @@ export class ReservationService {
     
     if (status) filter.status = status;
     if (date) {
+      console.log('[findAll] date param:', date);
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
+      console.log('[findAll] query range:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
       filter.reservationDate = {
         $gte: startOfDay,
         $lte: endOfDay,
@@ -231,6 +233,14 @@ export class ReservationService {
       .skip(skip)
       .limit(limit)
       .exec();
+
+    console.log('[findAll] found reservations:', reservations.length, reservations.map(r => ({
+      id: r._id,
+      date: r.reservationDate,
+      time: r.reservationTime,
+      status: r.status,
+      table: r.table ? (typeof r.table === 'object' ? { id: (r.table as any)._id, name: (r.table as any).tableName } : r.table) : null,
+    })));
 
     return { reservations, total, totalPages };
   }
